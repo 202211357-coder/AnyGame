@@ -18,9 +18,7 @@
   --foam: #f2f7f6;            /* foam white */
   --mist: #a8c3cc;            /* secondary text, sea haze */
   --buoy: #ff7a2e;            /* buoy orange accent */
-  --flare: #ff4a3d;           /* life / danger, dodge zone */
-  --dive: #3fb6ff;            /* dive zone */
-  --jump: #ffc53d;            /* jump zone */
+  --flare: #ff4a3d;           /* life / danger */
   --font-display: "Black Han Sans", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
   --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
   color-scheme: dark;
@@ -102,13 +100,6 @@ h2 { font-size: clamp(34px, 6vw, 48px); }
   flex: none; min-width: 52px; padding: 4px 8px; text-align: center; border-radius: 8px;
   border: 1px solid rgba(242, 247, 246, .25); font-size: 12px; font-weight: 600; color: var(--foam);
 }
-.legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.legend span { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 8px 9px; border-radius: 10px; background: rgba(242, 247, 246, .06); font-size: 12px; font-weight: 600; }
-.legend small { font-size: 11px; font-weight: 400; line-height: 1.35; color: var(--mist); }
-.zs { display: block; height: 6px; border-radius: 3px; margin-bottom: 3px; }
-.zs.dodge { background: var(--flare); }
-.zs.dive { background: var(--dive); }
-.zs.jump { background: var(--jump); }
 .cta {
   border: 0; cursor: pointer; border-radius: 14px; padding: 15px 22px; margin-top: 4px;
   font-family: var(--font-display); font-size: 21px; color: var(--harbor); background: var(--buoy);
@@ -140,9 +131,6 @@ h2 { font-size: clamp(34px, 6vw, 48px); }
   .life { width: 20px; height: 20px; }
   .icon-btn { width: 36px; height: 36px; }
   .pill { padding: 7px 9px; }
-}
-@media (max-width: 420px) {
-  .legend small { display: none; }
 }
 @media (max-width: 520px) {
   .route-labels .l0, .route-labels .l1, .route-labels .l2 { display: none; }
@@ -197,15 +185,10 @@ h2 { font-size: clamp(34px, 6vw, 48px); }
       <h1>부캉이<br><em>북항 탈출</em></h1>
       <p class="lede">9월 18일부터 북항 친수공원 인공수로에 머물고 있는 흑상어 부캉이. 물펌프로 밀어내기도, 대형 그물도 통하지 않았어요. 이번엔 부캉이가 직접 수로를 빠져나가 방파제 너머 바다로 갑니다.</p>
       <ul class="howto">
-        <li><span class="key">← →</span>좌우로 밀어 라인 이동<span class="kb"> (키보드 ← → · A D)</span></li>
-        <li><span class="key">↑ ↓</span>위로 밀면 점프, 아래로 밀면 잠수<span class="kb"> (키보드 ↑ ↓ · W S)</span></li>
+        <li><span class="key">← →</span><span>좌우로 밀어 라인 이동<span class="kb"> (키보드 ← → · A D)</span></span></li>
+        <li><span class="key">↑ ↓</span><span>위로 밀면 점프, 아래로 밀면 잠수<span class="kb"> (키보드 ↑ ↓ · W S)</span></span></li>
         <li><span class="key">체력 3</span>세 번 부딪히면 실패, 고등어는 점수</li>
       </ul>
-      <div class="legend" aria-label="수면에 표시되는 피격 범위 색">
-        <span><i class="zs dodge"></i>빨강 · 피하기<small>부표, 물펌프</small></span>
-        <span><i class="zs dive"></i>파랑 · 잠수<small>그물, 구조 보트</small></span>
-        <span><i class="zs jump"></i>노랑 · 점프<small>부유물, 오일펜스(잠수도 가능)</small></span>
-      </div>
       <button class="cta" id="btnStart">바다로 헤엄치기</button>
       <p class="best" id="bestLine"></p>
     </div>
@@ -405,7 +388,7 @@ const MAT = {
   metal: std({ vertexColors: true, roughness: 0.35, metalness: 0.65 }),
   bld: std({ map: winTex, vertexColors: true, roughness: 0.75 }),
   obj: std({ vertexColors: true, roughness: 0.55, metalness: 0.05 }),
-  net: std({ map: netTex, alphaTest: 0.45, side: T.DoubleSide, color: lin(0xd5ddd6), roughness: 0.9 }),
+  net: std({ map: netTex, alphaTest: 0.45, side: T.DoubleSide, color: lin(0xeef3ef), roughness: 0.9 }),
   lamp: std({ color: lin(0xfff1c2), emissive: lin(0xffd36b), emissiveIntensity: 1.6 }),
   fish: std({ vertexColors: true, roughness: 0.28, metalness: 0.45, emissive: lin(0x0b2a33) }),
 };
@@ -1144,7 +1127,19 @@ function buoyParts(v) {
   if (v === 'red') p.push(P(PG.cone8, TM(0, 2.48, 0, 0, 0, 0, 0.22, 0.36, 0.22), body));
   else if (v === 'green') p.push(cylP(0, 2.46, 0, 0.17, 0.34, body));
   else { p.push(boxP(0, 2.48, 0, 0.07, 0.46, 0.07, body, 0, 0, Math.PI / 4)); p.push(boxP(0, 2.48, 0, 0.07, 0.46, 0.07, body, 0, 0, -Math.PI / 4)); }
+  p.push(cylP(0, -0.62, 0, 0.12, 0.16, 0x3a3530, PG.cyl6));
+  chain(p, new V3(0, -0.68, 0), new V3(0.15, BED + 0.4, 0.9));
+  p.push(boxP(0.15, BED + 0.2, 0.9, 0.75, 0.4, 0.75, 0x77736b));
   return p;
+}
+// Mooring chain of alternating links hanging in a slight catenary between a and b.
+function chain(p, a, b) {
+  const n = Math.round(a.distanceTo(b) / 0.13);
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n, c = a.clone().lerp(b, t);
+    c.z -= Math.sin(t * Math.PI) * 0.25;
+    p.push(P(PG.torus, TM(c.x, c.y, c.z, 0, i % 2 ? Math.PI / 2 : 0, 0, 0.06, 0.09, 0.06), 0x3a3530));
+  }
 }
 function boatParts() {
   const OR = 0xf06a1e, p = [];
@@ -1164,24 +1159,29 @@ function boatParts() {
   p.push(boxP(0, 0.45, 0.15, 0.5, 0.6, 0.4, 0xe9ecee));
   p.push(boxP(-0.12, 0.8, 0.15, 0.14, 0.08, 0.1, 0x2e6bff));
   p.push(boxP(0.12, 0.8, 0.15, 0.14, 0.08, 0.1, 0xff3030));
-  for (const [x, z] of [[-0.32, 0.8], [0.3, -0.45]]) {
-    p.push(P(PG.cyl10, TM(x, 0.52, z, 0, 0, 0, 0.17, 0.52, 0.2), 0xff7b1c));
-    p.push(sphP(x, 0.92, z, 0.11, 0xd9a882));
-    p.push(P(PG.cap, TM(x, 0.95, z, 0, 0, 0, 0.125, 0.11, 0.125), 0xf4f4f2));
-    p.push(between(new V3(x, 0.66, z + 0.18), new V3(x * 0.4, 0.5, z - 0.25), 0.045, 0xff7b1c));
-    p.push(between(new V3(x, 0.66, z - 0.18), new V3(x * 0.4, 0.5, z - 0.35), 0.045, 0xff7b1c));
+  for (const [x, z] of [[-0.3, 0.8], [0.28, -0.5]]) {
+    for (const sd of [-1, 1]) p.push(between(new V3(x, 0.1, z + sd * 0.09), new V3(x, 0.82, z + sd * 0.08), 0.07, 0x23272e, PG.lim));
+    p.push(P(PG.torso, TM(x, 1.1, z, 0, 0, 0, 0.17, 0.58, 0.21), 0xff7b1c));
+    p.push(sphP(x, 1.55, z, 0.11, 0xd9a882));
+    p.push(P(PG.cap, TM(x, 1.59, z, 0, 0, 0, 0.125, 0.11, 0.125), 0xf4f4f2));
+    p.push(between(new V3(x, 1.32, z + 0.2), new V3(x * 0.3, 0.95, z - 0.15), 0.045, 0xff7b1c));
+    p.push(between(new V3(x, 1.32, z - 0.2), new V3(x * 0.3, 0.95, z - 0.3), 0.045, 0xff7b1c));
   }
+  p.push(cylP(0, 1.35, 0.25, 0.025, 1.4, 0xd9dcdf, PG.cyl6));
+  p.push(boxP(0, 2.02, 0.25, 0.1, 0.08, 0.1, 0x2e6bff));
   xform(p, TM(0, 0, 0, 0, Math.PI, 0));
   return p;
 }
 function netParts() {
   const p = [];
-  p.push(P(PG.cyl6, TM(0, 0.06, 0, 0, 0, Math.PI / 2, 0.025, 5.4, 0.025), 0xe8e2d0));
-  for (let x = -2.5; x <= 2.51; x += 0.42) p.push(P(PG.sph, TM(x, 0.07, 0, 0, 0, 0, 0.15, 0.11, 0.11), 0xf27a1d));
+  p.push(P(PG.cyl6, TM(0, 1.45, 0, 0, 0, Math.PI / 2, 0.03, 5.5, 0.03), 0xe8e2d0));
+  for (let x = -2.4; x <= 2.41; x += 0.6) p.push(P(PG.sph, TM(x, 1.45, 0, 0, 0, 0, 0.1, 0.08, 0.08), 0xf27a1d));
+  p.push(P(PG.cyl6, TM(0, -1.0, 0, 0, 0, Math.PI / 2, 0.03, 5.5, 0.03), 0x2b2b2b));
+  for (let x = -2.55; x <= 2.56; x += 0.3) p.push(boxP(x, -1.04, 0, 0.12, 0.08, 0.08, 0x6d7276));
   for (const s of [-1, 1]) {
-    p.push(cylP(s * 2.8, 0.12, 0, 0.28, 0.6, 0xf4f4f0, PG.cyl16));
-    p.push(cylP(s * 2.8, 1.0, 0, 0.03, 1.5, 0x333333, PG.cyl6));
-    p.push(boxP(s * 2.8 + 0.2, 1.6, 0, 0.38, 0.26, 0.02, 0xff5a1f));
+    p.push(cylP(s * 2.78, 0.35, 0, 0.05, 2.9, 0x40362c, PG.cyl6));
+    p.push(cylP(s * 2.78, 0.0, 0, 0.26, 0.5, 0xf4f4f0, PG.cyl16));
+    p.push(boxP(s * 2.78 + s * 0.2, 1.75, 0, 0.38, 0.26, 0.02, 0xff5a1f));
   }
   return p;
 }
@@ -1194,7 +1194,13 @@ function pumpParts() {
   p.push(cylP(0.3, 1.17, 0.5, 0.04, 0.42, 0x555a60, PG.cyl6));
   p.push(cylP(0, 0.56, -0.65, 0.2, 0.42, 0x2b62c4));
   for (const hy of [0.4, 0.5]) p.push(P(PG.torus, TM(-0.4, hy, -0.65, Math.PI / 2, 0, 0, 0.26, 0.26, 0.45), 0x2a63c7));
-  p.push(between(new V3(0.1, 0.55, -0.85), new V3(0.4, -0.6, -1.8), 0.075, 0x2a63c7, PG.cyl10));
+  p.push(between(new V3(0.1, 0.55, -0.85), new V3(0.3, -0.5, -1.3), 0.075, 0x2a63c7, PG.cyl10));
+  p.push(between(new V3(0.3, -0.5, -1.3), new V3(0.35, BED + 0.35, -1.5), 0.075, 0x2a63c7, PG.cyl10));
+  p.push(cylP(0.35, BED + 0.2, -1.5, 0.2, 0.32, 0x2b2e33, PG.cyl10));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    p.push(between(new V3(sx * 0.6, -0.2, sz * 1.1), new V3(sx * 1.0, BED + 0.15, sz * 1.6), 0.018, 0xd8d2c0, PG.cyl6));
+    p.push(boxP(sx * 1.0, BED + 0.12, sz * 1.6, 0.3, 0.24, 0.3, 0x77736b));
+  }
   p.push(cylP(0.7, 0.95, 1.05, 0.02, 1.2, 0x333333, PG.cyl6));
   p.push(boxP(0.7, 1.58, 1.05, 0.08, 0.12, 0.08, 0xff9a1a));
   for (const s of [-1, 1]) for (const z of [-1.1, 1.1]) p.push(cylP(s * 0.75, 0.55, z, 0.025, 0.5, 0xc5cbd0, PG.cyl6));
@@ -1227,53 +1233,25 @@ const OBJ_GEO = {
   buoy_red: merge(buoyParts('red')), buoy_green: merge(buoyParts('green')), buoy_yellow: merge(buoyParts('yellow')),
   boat: merge(boatParts()), net: merge(netParts()), pump: merge(pumpParts()), boom: merge(boomParts()), debris: merge(debrisParts()),
 };
-const netPlane = (() => { const g = new T.PlaneGeometry(5.4, 1.05); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 9, uv.getY(i) * 1.75); return g; })();
-// zone: colour of the hit area drawn on the water. jump/dive: whether that manoeuvre clears it.
+const netPlane = (() => { const g = new T.PlaneGeometry(5.5, 2.45); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 9, uv.getY(i) * 4); return g; })();
+// y0..y1: vertical extent of the collision volume. jump/dive: whether that manoeuvre clears it.
 const OBST = {
-  buoy: { name: '부표', hit: '부표에 쾅!', halfW: 0.75, depth: 1.4, y0: -0.6, y1: 2.7, zone: 'dodge' },
-  pump: { name: '물펌프', hit: '물펌프에 부딪혔다!', halfW: 1.0, depth: 2.6, y0: -0.5, y1: 1.3, zone: 'dodge' },
-  boat: { name: '구조 보트', hit: '구조 보트와 충돌!', halfW: 0.95, depth: 3.6, y0: -0.2, y1: 1.1, vz: 2.4, dive: true, zone: 'dive' },
-  net: { name: '그물', hit: '그물에 걸렸다!', halfW: 2.55, depth: 1.0, y0: -1.05, y1: 0.35, dive: true, zone: 'dive' },
-  debris: { name: '부유물', hit: '부유물에 걸렸다!', halfW: 0.95, depth: 1.8, y0: -0.15, y1: 0.3, jump: true, zone: 'jump' },
-  boom: { name: '오일펜스', hit: '오일펜스에 막혔다!', halfW: 2.55, depth: 0.9, y0: -0.65, y1: 0.35, jump: true, dive: true, zone: 'both' },
+  buoy: { name: '부표', hit: '부표에 쾅!', halfW: 0.75, depth: 1.4, y0: BED, y1: 2.7 },
+  pump: { name: '물펌프', hit: '물펌프에 부딪혔다!', halfW: 1.0, depth: 2.6, y0: BED, y1: 1.3 },
+  boat: { name: '구조 보트', hit: '구조 보트와 충돌!', halfW: 0.95, depth: 3.6, y0: -0.25, y1: 1.7, vz: 2.4, dive: true },
+  net: { name: '그물', hit: '그물에 걸렸다!', halfW: 2.55, depth: 1.0, y0: -1.08, y1: 1.5, dive: true },
+  debris: { name: '부유물', hit: '부유물에 걸렸다!', halfW: 0.95, depth: 1.8, y0: -0.15, y1: 0.3, jump: true, dive: true },
+  boom: { name: '오일펜스', hit: '오일펜스에 막혔다!', halfW: 2.55, depth: 0.9, y0: -0.68, y1: 0.35, jump: true, dive: true },
 };
-function zoneTex(rgb, kind) {
-  const c = (a) => `rgba(${rgb},${a})`;
-  return ctex(256, 256, (g, w, h) => {
-    const x0 = 10, y0 = 10, ww = w - 20, hh = h - 20, rr = 34;
-    const path = () => { g.beginPath(); g.moveTo(x0 + rr, y0); g.arcTo(x0 + ww, y0, x0 + ww, y0 + hh, rr); g.arcTo(x0 + ww, y0 + hh, x0, y0 + hh, rr); g.arcTo(x0, y0 + hh, x0, y0, rr); g.arcTo(x0, y0, x0 + ww, y0, rr); g.closePath(); };
-    g.clearRect(0, 0, w, h);
-    path(); g.fillStyle = c(0.24); g.fill();
-    if (kind === 'dodge') { g.save(); path(); g.clip(); g.strokeStyle = c(0.42); g.lineWidth = 16; for (let k = -h; k < w; k += 46) { g.beginPath(); g.moveTo(k, h); g.lineTo(k + h, 0); g.stroke(); } g.restore(); }
-    path(); g.lineWidth = 12; g.strokeStyle = c(0.95); g.stroke();
-    const chev = (cy, dir) => { g.beginPath(); g.moveTo(w / 2 - 54, cy + dir * 24); g.lineTo(w / 2, cy - dir * 24); g.lineTo(w / 2 + 54, cy + dir * 24); g.lineWidth = 20; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = c(0.98); g.stroke(); };
-    if (kind === 'jump') { chev(100, 1); chev(156, 1); }
-    if (kind === 'dive') { chev(100, -1); chev(156, -1); }
-    if (kind === 'both') { chev(90, 1); chev(166, -1); }
-  });
-}
-const ZRGB = { dodge: '255,74,61', dive: '63,182,255', jump: '255,197,61', both: '255,197,61' };
-const ZT = {}, ZI = {};
-for (const k in ZRGB) ZT[k] = zoneTex(ZRGB[k], k);
-// Floating action icon above each hitbox: <-> dodge, down = dive, up = jump.
-function iconTex(rgb, kind) {
-  return ctex(128, 128, (g, w) => {
-    g.clearRect(0, 0, w, w);
-    g.beginPath(); g.arc(64, 64, 56, 0, 7); g.fillStyle = 'rgba(12,34,48,0.78)'; g.fill();
-    g.lineWidth = 8; g.strokeStyle = `rgb(${rgb})`; g.stroke();
-    g.lineWidth = 11; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#ffffff';
-    const arrow = (x0, y0, x1, y1) => {
-      const a = Math.atan2(y1 - y0, x1 - x0), L = 17;
-      g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1);
-      g.moveTo(x1 - L * Math.cos(a - 0.65), y1 - L * Math.sin(a - 0.65)); g.lineTo(x1, y1); g.lineTo(x1 - L * Math.cos(a + 0.65), y1 - L * Math.sin(a + 0.65)); g.stroke();
-    };
-    if (kind === 'dodge') { arrow(64, 64, 30, 64); arrow(64, 64, 98, 64); }
-    if (kind === 'dive') arrow(64, 32, 64, 96);
-    if (kind === 'jump') arrow(64, 96, 64, 32);
-    if (kind === 'both') { arrow(46, 92, 46, 36); arrow(82, 36, 82, 92); }
-  }, true);
-}
-for (const k in ZRGB) ZI[k] = iconTex(ZRGB[k], k);
+// One neutral style for every obstacle: the hit area, nothing about how to pass it.
+const HIT_RGB = '255,128,96';
+const zoneTex = ctex(256, 256, (g, w, h) => {
+  const x0 = 10, y0 = 10, ww = w - 20, hh = h - 20, rr = 34;
+  g.clearRect(0, 0, w, h);
+  g.beginPath(); g.moveTo(x0 + rr, y0); g.arcTo(x0 + ww, y0, x0 + ww, y0 + hh, rr); g.arcTo(x0 + ww, y0 + hh, x0, y0 + hh, rr); g.arcTo(x0, y0 + hh, x0, y0, rr); g.arcTo(x0, y0, x0 + ww, y0, rr); g.closePath();
+  g.fillStyle = `rgba(${HIT_RGB},0.18)`; g.fill();
+  g.lineWidth = 12; g.strokeStyle = `rgba(${HIT_RGB},0.9)`; g.stroke();
+});
 // Edge frame of a w x h x d box built from thin bars (GL lines are 1 px, too thin to read).
 function frameGeo(w, h, d, t = 0.075) {
   const parts = [], X = w / 2, Y = h / 2, Z = d / 2;
@@ -1291,21 +1269,22 @@ function acquire(type) {
   if (!e) {
     const def = OBST[type];
     const mesh = new T.Mesh(OBJ_GEO[type === 'buoy' ? 'buoy_red' : type], MAT.obj); mesh.castShadow = true;
-    if (type === 'net') { const np = new T.Mesh(netPlane, MAT.net); np.position.y = -0.47; mesh.add(np); }
-    // hitbox shown to the player: footprint on the water + translucent volume with a bright frame
-    // + floating action icon. x/z extents are exactly those used by the collision test.
-    const W = def.halfW * 2, D = def.depth, H = def.y1 - def.y0, col = new T.Color(`rgb(${ZRGB[def.zone]})`).convertSRGBToLinear();
+    if (type === 'net') { const np = new T.Mesh(netPlane, MAT.net); np.position.y = 0.225; mesh.add(np); }
+    // hit area shown to the player: footprint on the water + translucent volume with a frame.
+    // x/z extents are those of the collision test; the volume runs over the obstacle's real
+    // vertical extent (down to the bed when moored), so its shape alone hints at the way past.
+    const W = def.halfW * 2, D = def.depth, H = def.y1 - def.y0, col = new T.Color(`rgb(${HIT_RGB})`).convertSRGBToLinear();
     const zone = new T.Group();
-    const decal = new T.Mesh(PG.planeH, new T.MeshBasicMaterial({ map: ZT[def.zone], transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+    const decal = new T.Mesh(PG.planeH, new T.MeshBasicMaterial({ map: zoneTex, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
     decal.scale.set(W, 1, Math.max(D, 1.4)); decal.position.y = 0.03; decal.renderOrder = 2;
     const fill = new T.Mesh(PG.box, new T.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
     fill.scale.set(W, H, D); fill.position.y = (def.y0 + def.y1) / 2; fill.renderOrder = 2;
-    const frame = new T.Mesh(frameGeo(W, H, D), new T.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
-    frame.position.y = fill.position.y; frame.renderOrder = 2;
-    const icon = new T.Sprite(new T.SpriteMaterial({ map: ZI[def.zone], transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
-    icon.scale.set(1.0, 1.0, 1); icon.position.y = Math.max(def.y1, 0.6) + 0.9; icon.renderOrder = 4;
-    zone.add(decal, fill, frame, icon);
-    zone.userData.mats = [[decal.material, 1], [fill.material, 0.14], [frame.material, 0.95], [icon.material, 1]];
+    // frame is drawn before the water and writes depth, so the submerged part shows through
+    // the water (tinted) and the water behind it cannot paint over the part above the surface
+    const frame = new T.Mesh(frameGeo(W, H, D), new T.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, depthWrite: true, toneMapped: false }));
+    frame.position.y = fill.position.y; frame.renderOrder = 0;
+    zone.add(decal, fill, frame);
+    zone.userData.mats = [[decal.material, 1], [fill.material, 0.1], [frame.material, 0.9]];
     zone.userData.op = 0;
     scene.add(mesh, zone); e = { mesh, zone };
   }
@@ -1435,7 +1414,6 @@ const JT = 0.8, DT = 1.25, JUMP_H = 1.75, DIVE_D = 1.4;   // jump/dive duration 
 let state = 'title';
 const MILESTONES = [
   { d: 5, msg: '출발! 바다까지 1,400 m' },
-  { d: 45, msg: '↑ 점프 · ↓ 잠수로 그물과 부유물을 넘어요' },
   { d: CANAL_END - 220, msg: '수로 출구까지 200 m' },
   { d: CANAL_END + 5, msg: '북항 진입! 수로를 빠져나왔다' },
   { d: GOAL - 160, msg: '방파제 등대가 보인다. 조금만 더!' },
@@ -1514,7 +1492,7 @@ function endVertical() {
 }
 function cleared(o, air) {
   o.cleared = true; Snd.clear();
-  toast(air ? `${o.def.name} 점프 통과!` : `${o.def.name} 밑으로 통과!`);
+  toast(`${o.def.name} 통과!`);
 }
 
 function spawnRow(d) {
@@ -1656,7 +1634,7 @@ function update(dt) {
   if (G.vmode !== 'swim' && state !== 'paused') { G.vt += dt; if (G.vt >= (G.vmode === 'jump' ? JT : DT)) endVertical(); }
   let vyo = 0;
   if (G.vmode === 'jump') vyo = JUMP_H * Math.sin(Math.PI * G.vt / JT);
-  else if (G.vmode === 'dive') vyo = -DIVE_D * Math.min(1, 1.7 * Math.sin(Math.PI * G.vt / DT));
+  else if (G.vmode === 'dive') vyo = -DIVE_D * Math.min(1, 2.4 * Math.sin(Math.PI * G.vt / DT));
   let sy = SHARK_Y + vyo + (G.vmode === 'swim' ? Math.sin(clock * 1.9) * 0.025 : 0);
   if (state === 'win') {
     const t = G.endT - 0.25;
