@@ -18,7 +18,9 @@
   --foam: #f2f7f6;            /* foam white */
   --mist: #a8c3cc;            /* secondary text, sea haze */
   --buoy: #ff7a2e;            /* buoy orange accent */
-  --flare: #ff4a3d;           /* life / danger */
+  --flare: #ff4a3d;           /* life / danger, dodge zone */
+  --dive: #3fb6ff;            /* dive zone */
+  --jump: #ffc53d;            /* jump zone */
   --font-display: "Black Han Sans", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
   --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
   color-scheme: dark;
@@ -100,8 +102,13 @@ h2 { font-size: clamp(34px, 6vw, 48px); }
   flex: none; min-width: 52px; padding: 4px 8px; text-align: center; border-radius: 8px;
   border: 1px solid rgba(242, 247, 246, .25); font-size: 12px; font-weight: 600; color: var(--foam);
 }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chips span { font-size: 12px; padding: 4px 9px; border-radius: 999px; background: rgba(242, 247, 246, .08); color: var(--mist); }
+.legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.legend span { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 8px 9px; border-radius: 10px; background: rgba(242, 247, 246, .06); font-size: 12px; font-weight: 600; }
+.legend small { font-size: 11px; font-weight: 400; line-height: 1.35; color: var(--mist); }
+.zs { display: block; height: 6px; border-radius: 3px; margin-bottom: 3px; }
+.zs.dodge { background: var(--flare); }
+.zs.dive { background: var(--dive); }
+.zs.jump { background: var(--jump); }
 .cta {
   border: 0; cursor: pointer; border-radius: 14px; padding: 15px 22px; margin-top: 4px;
   font-family: var(--font-display); font-size: 21px; color: var(--harbor); background: var(--buoy);
@@ -134,10 +141,15 @@ h2 { font-size: clamp(34px, 6vw, 48px); }
   .icon-btn { width: 36px; height: 36px; }
   .pill { padding: 7px 9px; }
 }
+@media (max-width: 420px) {
+  .legend small { display: none; }
+}
 @media (max-width: 520px) {
   .route-labels .l0, .route-labels .l1, .route-labels .l2 { display: none; }
   .route { padding: 9px 10px 5px; }
-  .howto li:nth-child(2) { display: none; }
+}
+@media (pointer: coarse) {
+  .kb { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   #toast, .life, #fade { transition: none; }
@@ -185,11 +197,15 @@ h2 { font-size: clamp(34px, 6vw, 48px); }
       <h1>부캉이<br><em>북항 탈출</em></h1>
       <p class="lede">9월 18일부터 북항 친수공원 인공수로에 머물고 있는 흑상어 부캉이. 물펌프로 밀어내기도, 대형 그물도 통하지 않았어요. 이번엔 부캉이가 직접 수로를 빠져나가 방파제 너머 바다로 갑니다.</p>
       <ul class="howto">
-        <li><span class="key">스와이프</span>화면을 좌우로 밀어 세 라인 사이를 이동</li>
-        <li><span class="key">← →</span>키보드 방향키나 A·D 키로도 조작</li>
-        <li><span class="key">체력 3</span>장애물에 세 번 부딪히면 실패, 고등어는 점수</li>
+        <li><span class="key">← →</span>좌우로 밀어 라인 이동<span class="kb"> (키보드 ← → · A D)</span></li>
+        <li><span class="key">↑ ↓</span>위로 밀면 점프, 아래로 밀면 잠수<span class="kb"> (키보드 ↑ ↓ · W S)</span></li>
+        <li><span class="key">체력 3</span>세 번 부딪히면 실패, 고등어는 점수</li>
       </ul>
-      <div class="chips" aria-label="장애물 종류"><span>부표</span><span>그물</span><span>구조 보트</span><span>물펌프</span><span>오일펜스</span><span>부유물</span></div>
+      <div class="legend" aria-label="수면에 표시되는 피격 범위 색">
+        <span><i class="zs dodge"></i>빨강 · 피하기<small>부표, 물펌프</small></span>
+        <span><i class="zs dive"></i>파랑 · 잠수<small>그물, 구조 보트</small></span>
+        <span><i class="zs jump"></i>노랑 · 점프<small>부유물, 오일펜스(잠수도 가능)</small></span>
+      </div>
       <button class="cta" id="btnStart">바다로 헤엄치기</button>
       <p class="best" id="bestLine"></p>
     </div>
@@ -394,6 +410,22 @@ const MAT = {
   fish: std({ vertexColors: true, roughness: 0.28, metalness: 0.45, emissive: lin(0x0b2a33) }),
 };
 
+// Crowd and trees: idle sway in the wind, and spectators hop when the shark passes them.
+const crowdU = { uT: { value: 0 }, uSZ: { value: 0 } };
+MAT.matte.onBeforeCompile = (sh) => {
+  sh.uniforms.uT = crowdU.uT; sh.uniforms.uSZ = crowdU.uSZ;
+  sh.vertexShader = 'attribute vec3 aSway; uniform float uT; uniform float uSZ;\n' + sh.vertexShader.replace('#include <begin_vertex>', `
+    vec3 transformed = vec3(position);
+    float hgt = max(position.y - aSway.y, 0.0);
+    transformed.x += sin(uT * 1.4 + aSway.x) * 0.016 * hgt * aSway.z;
+    transformed.z += cos(uT * 1.1 + aSway.x * 1.7) * 0.012 * hgt * aSway.z;
+    if (aSway.z > 0.9) {
+      float wz = (modelMatrix * vec4(position, 1.0)).z;
+      float near = 1.0 - smoothstep(3.0, 16.0, abs(wz - uSZ));
+      transformed.y += near * max(0.0, sin(uT * 9.0 + aSway.x * 3.0)) * 0.1 * step(0.45, fract(aSway.x * 0.37));
+    }`);
+};
+
 /* ================= geometry helpers ================= */
 const PG = {
   box: new T.BoxGeometry(1, 1, 1),
@@ -409,6 +441,10 @@ const PG = {
   tire: new T.TorusGeometry(1, 0.38, 8, 16),
   plane: new T.PlaneGeometry(1, 1),
   planeH: new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+  lim: new T.CylinderGeometry(1, 1, 1, 6, 1, true),
+  sphL: new T.SphereGeometry(1, 9, 7),
+  oct: new T.OctahedronGeometry(1, 0),
+  torso: new T.CylinderGeometry(1, 0.72, 1, 8),
 };
 const P = (g, m, c) => ({ g, m, c: typeof c === 'number' ? lin(c) : c });
 const boxP = (x, y, z, w, h, d, c, rx = 0, ry = 0, rz = 0) => P(PG.box, TM(x, y, z, rx, ry, rz, w, h, d), c);
@@ -428,6 +464,7 @@ function merge(parts, withUV = false) {
   for (const p of parts) { const c = p.g.attributes.position.count; nV += c; nI += p.g.index ? p.g.index.count : c; }
   const pos = new Float32Array(nV * 3), nor = new Float32Array(nV * 3), col = new Float32Array(nV * 3);
   const uv = withUV ? new Float32Array(nV * 2) : null;
+  const sw = new Float32Array(nV * 3);
   const idx = nV > 65535 ? new Uint32Array(nI) : new Uint16Array(nI);
   const v = new V3(), n = new V3(), lv = new V3(), nm = new T.Matrix3();
   let vo = 0, io = 0;
@@ -444,6 +481,7 @@ function merge(parts, withUV = false) {
       if (p.cf) { const cc = p.cf(lv.x, lv.y, lv.z); col[k] = cc.r; col[k + 1] = cc.g; col[k + 2] = cc.b; }
       else if (CA && !p.c) { col[k] = CA.getX(i); col[k + 1] = CA.getY(i); col[k + 2] = CA.getZ(i); }
       else { col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b; }
+      if (p.sw) { sw[k] = p.sw[0]; sw[k + 1] = p.sw[1]; sw[k + 2] = p.sw[2]; }
       if (uv) { const u2 = (vo + i) * 2; if (UA) { uv[u2] = UA.getX(i) * (p.su || 1); uv[u2 + 1] = UA.getY(i) * (p.sv || 1); } }
     }
     if (g.index) { for (let j = 0; j < g.index.count; j++) idx[io + j] = g.index.getX(j) + vo; io += g.index.count; }
@@ -455,6 +493,7 @@ function merge(parts, withUV = false) {
   out.setAttribute('normal', new T.BufferAttribute(nor, 3));
   out.setAttribute('color', new T.BufferAttribute(col, 3));
   if (uv) out.setAttribute('uv', new T.BufferAttribute(uv, 2));
+  out.setAttribute('aSway', new T.BufferAttribute(sw, 3));
   out.setIndex(new T.BufferAttribute(idx, 1));
   out.computeBoundingSphere();
   return out;
@@ -544,16 +583,72 @@ ring(700, 35, 150, 11, 0x405a4a, 0x56715c);
 })();
 
 /* ================= water ================= */
+// Shark wake (Kelvin-type V wake + turbulent trail), splash rings and lane guides are all
+// evaluated in the water shader as a height field; its gradient perturbs the surface normal.
+const ringV = [0, 1, 2, 3].map(() => new T.Vector4(0, 0, -99, 0)); let ringI = 0;
 const waterU = {
   uTime: { value: 0 }, uDeep: { value: lin(0x123c4c) }, uShallow: { value: lin(0x2b6c70) },
   uSkyTop: { value: SKY_TOP }, uSkyHor: { value: HAZE }, uSunDir: { value: sunDir }, uSunCol: { value: lin(0xfff2d6) },
   uFogCol: { value: HAZE }, uFogNear: { value: FOG_NEAR }, uFogFar: { value: FOG_FAR }, uCanalEnd: { value: CANAL_END },
+  uShark: { value: new T.Vector4(0, 0, 1, 0) }, uRings: { value: ringV }, uLane: { value: 0 }, uLaneX: { value: 0 },
 };
 const water = new T.Mesh(new T.PlaneGeometry(1800, 1800).rotateX(-Math.PI / 2), new T.ShaderMaterial({
   uniforms: waterU, transparent: true, fog: false,
   vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
-  fragmentShader: `uniform float uTime, uFogNear, uFogFar, uCanalEnd; uniform vec3 uDeep, uShallow, uSkyTop, uSkyHor, uSunDir, uSunCol, uFogCol; varying vec3 vW;
+  fragmentShader: `uniform float uTime, uFogNear, uFogFar, uCanalEnd, uLane, uLaneX;
+    uniform vec3 uDeep, uShallow, uSkyTop, uSkyHor, uSunDir, uSunCol, uFogCol;
+    uniform vec4 uShark;      // x, z, speed, wake strength
+    uniform vec4 uRings[4];   // x, z, start time, strength
+    varying vec3 vW;
     vec2 wv(vec2 p, vec2 d, float f, float a, float s){ return d * (a * f * cos(dot(p, d) * f + uTime * s)); }
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y); }
+    float lace(vec2 q){ float n = noise(q); return pow(1.0 - abs(n * 2.0 - 1.0), 6.0); }
+    float wake(vec2 p, inout float foam){
+      float h = 0.0, A = uShark.w;
+      float u = p.y - uShark.y, v = p.x - uShark.x;          // u > 0 : behind the shark
+      if (A > 0.01 && u > -4.0 && u < 150.0 && abs(v) < 40.0) {
+        float U = uShark.z;
+        // bow wave piled up where the dorsal fin cuts the surface
+        float rb = length(vec2(v * 1.7, (u + 0.45) * 0.8));
+        float bow = exp(-rb * rb * 2.2);
+        h += A * 0.05 * bow * cos(rb * 6.0);
+        foam += A * bow * 0.6 * (0.5 + 0.5 * lace(p * 5.0 + uTime));
+        // V wake: Kelvin half-angle 19.47 deg, narrowing roughly as 1/Fr at high Froude number.
+        // Divergent crests are short feathered arcs along the cusp line, their wave vector at
+        // ~35.3 deg to the track; weaker transverse crests run across the inside of the V.
+        float uu = max(u, 0.0), on = smoothstep(-0.3, 0.8, u);
+        float Fr = U / sqrt(9.81 * 0.45);
+        float edge = uu * tan(min(0.3398, 0.85 / max(Fr, 0.5))) + 0.35;
+        float s = abs(v) / edge;
+        float decay = exp(-uu / 30.0) / (1.0 + uu * 0.06);
+        float cusp = smoothstep(0.45, 0.88, s) * (1.0 - smoothstep(0.9, 1.06, s)) * on;
+        float kd = 7.0 / (1.0 + uu * 0.01);
+        h += A * 0.06 * cusp * decay * sin(kd * (0.816 * uu + 0.577 * abs(v)));
+        float inside = (1.0 - smoothstep(0.55, 0.95, s)) * on;
+        h += A * 0.02 * inside * decay * sin(4.2 * uu);
+        foam += A * cusp * exp(-uu / 5.0) * lace(p * 3.2 + vec2(uTime * 0.3, 0.0)) * 1.2;
+        // turbulent centre trail; tail beats shed alternating vortices (reverse Karman street, spacing U/f)
+        float lam = max(U, 2.0) / 1.8;
+        float vc = v - sin(6.2831 * p.y / lam) * 0.3 * smoothstep(0.0, 5.0, uu);
+        float w = 0.3 + uu * 0.03;
+        float trail = exp(-vc * vc / (w * w)) * exp(-uu / 18.0) * on;
+        float n = noise(p * 2.6 + vec2(0.0, uTime * 0.7)) * 0.65 + noise(p * 7.0 - uTime * 0.4) * 0.35;
+        h += A * 0.04 * trail * (n - 0.5) * 2.0;
+        foam += A * trail * exp(-uu / 6.0) * (0.25 + 0.75 * lace(p * 2.4 + vec2(0.0, uTime * 0.5)));
+      }
+      for (int i = 0; i < 4; i++) {
+        vec4 R = uRings[i]; float t = uTime - R.z;
+        if (t > 0.0 && t < 3.0) {
+          float d = length(p - R.xy) - (0.3 + 2.4 * t);
+          float e = R.w * exp(-d * d * 2.5) * exp(-t * 1.2);
+          h += 0.1 * e * sin(d * 8.0);
+          foam += e * exp(-t * 2.2) * 0.7 * (0.4 + 0.6 * lace(p * 4.0));
+        }
+      }
+      return h;
+    }
     void main(){
       vec2 p = vW.xz;
       vec2 g = wv(p, normalize(vec2(0.3, 1.0)), 0.9, 0.06, 1.3)
@@ -561,6 +656,10 @@ const water = new T.Mesh(new T.PlaneGeometry(1800, 1800).rotateX(-Math.PI / 2), 
              + wv(p, normalize(vec2(0.9, 0.2)), 3.1, 0.013, 2.7)
              + wv(p, normalize(vec2(-0.2, -1.0)), 5.3, 0.006, 3.6)
              + wv(p, normalize(vec2(0.6, -0.7)), 9.7, 0.003, 5.1);
+      float foam = 0.0, fd = 0.0;
+      float h0 = wake(p, foam);
+      float hx = wake(p + vec2(0.05, 0.0), fd), hz = wake(p + vec2(0.0, 0.05), fd);
+      g += vec2(hx - h0, hz - h0) / 0.05;
       vec3 n = normalize(vec3(-g.x, 1.0, -g.y));
       vec3 v = normalize(cameraPosition - vW);
       float fres = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
@@ -573,7 +672,22 @@ const water = new T.Mesh(new T.PlaneGeometry(1800, 1800).rotateX(-Math.PI / 2), 
       vec3 col = mix(body, skyc, fres) + uSunCol * spec;
       float a = mix(mix(0.44, 0.62, harbor), 1.0, fres);
       a = clamp(a + spec, 0.0, 1.0);
-      float f = smoothstep(uFogNear, uFogFar, length(cameraPosition - vW));
+      col += vec3(0.5, 0.58, 0.58) * clamp(h0 * 3.2, -0.22, 0.28);
+      foam = clamp(foam, 0.0, 1.0);
+      col = mix(col, vec3(0.86, 0.92, 0.93), foam * 0.75);
+      a = max(a, foam * 0.9);
+      // lane guides: dashed lane boundaries + soft highlight of the target lane ahead of the shark
+      float dCam = length(cameraPosition - vW);
+      float vis = uLane * (1.0 - smoothstep(20.0, 85.0, dCam));
+      float lw = 0.035 + dCam * 0.002;
+      float dIn = min(abs(p.x + 1.2), abs(p.x - 1.2)), dOut = min(abs(p.x + 3.6), abs(p.x - 3.6));
+      float line = ((1.0 - smoothstep(lw * 0.5, lw, dIn)) + 0.55 * (1.0 - smoothstep(lw * 0.5, lw, dOut))) * step(0.62, fract(p.y / 3.2)) * vis;
+      float ahead = uShark.y - p.y;
+      float strip = (1.0 - smoothstep(0.95, 1.2, abs(p.x - uLaneX))) * smoothstep(-1.5, 2.0, ahead) * (1.0 - smoothstep(12.0, 45.0, ahead)) * uLane;
+      col = mix(col, vec3(0.92, 0.97, 1.0), line * 0.55);
+      col += vec3(0.07, 0.11, 0.12) * strip;
+      a = max(a, line * 0.6);
+      float f = smoothstep(uFogNear, uFogFar, dCam);
       col = mix(col, uFogCol, f); a = mix(a, 1.0, f);
       gl_FragColor = vec4(col, a);
       #include <tonemapping_fragment>
@@ -616,27 +730,73 @@ const PANTS = [0x23272e, 0x3a3d44, 0x2f3d57, 0x5b5146, 0x1c1d20, 0x8d8576];
 const SKIN = [0xe2b796, 0xd9a882, 0xc8946f, 0xedc4a5];
 const HAIR = [0x16130f, 0x2a1f17, 0x3b2b1e, 0x111111, 0x6b4a2e, 0x8a8580];
 
-function person(parts, x, y, z, r, face, sit = false) {
-  const s = r() < 0.12 ? 0.7 : 0.9 + r() * 0.18;
-  let yb = y;
-  if (!sit) { parts.push(P(PG.cyl6, TM(x, yb + 0.41 * s, z, 0, 0, 0, 0.12 * s, 0.82 * s, 0.15 * s), pick(r, PANTS))); yb += 0.82 * s; }
-  else { parts.push(boxP(x + face * 0.2 * s, yb + 0.08 * s, z, 0.44 * s, 0.16 * s, 0.32 * s, pick(r, PANTS))); yb += 0.1 * s; }
-  const jc = pick(r, JACKETS);
-  parts.push(P(PG.cyl10, TM(x, yb + 0.31 * s, z, 0, 0, 0, 0.15 * s, 0.62 * s, 0.2 * s), jc));
-  parts.push(sphP(x, yb + 0.76 * s, z, 0.11 * s, pick(r, SKIN)));
-  parts.push(P(PG.cap, TM(x - face * 0.012, yb + 0.78 * s, z, 0, 0, 0, 0.118 * s, 0.1 * s, 0.118 * s), pick(r, HAIR)));
-  const side = r() < 0.5 ? 1 : -1;
-  if (r() < 0.55) {
-    const sh = new V3(x, yb + 0.56 * s, z + 0.17 * s * side), hand = new V3(x + face * 0.34 * s, yb + 0.8 * s, z + 0.08 * s * side);
-    parts.push(between(sh, hand, 0.045 * s, jc));
-    parts.push(boxP(hand.x + face * 0.02, hand.y + 0.06, hand.z, 0.015, 0.14 * s, 0.08 * s, 0x18191c));
-    parts.push(between(new V3(x, yb + 0.56 * s, z - 0.17 * s * side), new V3(x + face * 0.05, yb + 0.05 * s, z - 0.2 * s * side), 0.045 * s, jc));
-  } else {
-    for (const sd of [-1, 1]) parts.push(between(new V3(x, yb + 0.56 * s, z + 0.19 * s * sd), new V3(x + face * 0.06, yb + 0.02 * s, z + 0.22 * s * sd), 0.045 * s, jc));
+const SHOES = [0x1b1c1f, 0xe9e9e6, 0x5a4636, 0x2f3a4f, 0x8a8f96];
+const CAPS = [0x1f2a44, 0xe9e6df, 0x8f2e2e, 0x2d2f33, 0xc9a24a];
+const PACKS = [0x2d2f33, 0x4a5e78, 0x6b7350, 0x8f2e2e, 0xc8b89a];
+const POSES = ['film2', 'film2', 'filmHigh', 'point', 'down', 'pocket', 'wave', 'film2', 'down'];
+// Low-poly articulated person built facing +x, feet at y=0 (or hips on a seat when o.sit).
+function human(parts, X, Y, Z, r, yaw, o = {}) {
+  const p = [], V = (x, y, z) => new V3(x, y, z);
+  const child = r() < 0.1, sit = !!o.sit;
+  const s = child ? 0.6 + r() * 0.08 : 0.92 + r() * 0.15;
+  const skin = pick(r, SKIN), top = pick(r, JACKETS), bottom = pick(r, PANTS), shoe = pick(r, SHOES), hairC = pick(r, HAIR);
+  const fem = r() < 0.5, hipY = sit ? 0.47 : 0.88;
+  const skirt = fem && !sit && !child && r() < 0.3, legC = skirt ? 0x2a2420 : bottom;
+  for (const sd of [-1, 1]) {
+    const hip = V(0, hipY, sd * 0.09);
+    if (sit) {
+      const knee = V(0.42, hipY + 0.03, sd * 0.11), ank = V(0.47, 0.09, sd * 0.11);
+      p.push(between(hip, knee, 0.078, legC, PG.lim), between(knee, ank, 0.062, legC, PG.lim), boxP(0.53, 0.045, sd * 0.11, 0.25, 0.09, 0.1, shoe));
+    } else {
+      const fx = (r() - 0.5) * 0.14, knee = V(0.015 + fx * 0.5, 0.48, sd * 0.1), ank = V(fx, 0.09, sd * 0.11);
+      p.push(between(hip, knee, 0.08, legC, PG.lim), between(knee, ank, 0.062, legC, PG.lim), boxP(fx + 0.05, 0.045, sd * 0.11, 0.26, 0.09, 0.1, shoe));
+    }
+    p.push(P(PG.oct, TM(sit ? 0.42 : 0.015, sit ? hipY + 0.03 : 0.48, sd * 0.1, 0, 0, 0, 0.08, 0.08, 0.08), legC));
   }
+  p.push(P(PG.sphL, TM(0, hipY + 0.02, 0, 0, 0, 0, 0.12, 0.1, 0.17), skirt ? bottom : legC));
+  if (skirt) p.push(P(PG.frus, TM(0, hipY - 0.17, 0, 0, 0, 0, 0.2, 0.4, 0.24), bottom));
+  if (!skirt && !child && !sit && r() < 0.25) p.push(P(PG.frus, TM(-0.01, hipY - 0.14, 0, 0, 0, 0, 0.19, 0.42, 0.25), top));
+  p.push(P(PG.torso, TM(0, hipY + 0.29, 0, 0, 0, 0, 0.125, 0.56, 0.2), top));
+  p.push(P(PG.sphL, TM(0, hipY + 0.53, 0, 0, 0, 0, 0.11, 0.06, 0.21), top));
+  p.push(cylP(0, hipY + 0.6, 0, 0.045, 0.1, skin, PG.lim));
+  const hy = hipY + 0.76;
+  p.push(P(PG.sphL, TM(0.012, hy, 0, 0, 0, 0, 0.098, 0.118, 0.09), skin));
+  p.push(boxP(0.1, hy - 0.01, 0, 0.025, 0.035, 0.022, skin));
+  const hat = r() < 0.18;
+  if (hat) { const hc = pick(r, CAPS); p.push(P(PG.cap, TM(0, hy + 0.035, 0, 0, 0, 0, 0.106, 0.09, 0.1), hc)); p.push(boxP(0.11, hy + 0.04, 0, 0.12, 0.014, 0.13, hc)); }
+  else p.push(P(PG.cap, TM(-0.012, hy + 0.02, 0, 0, 0, 0.25, 0.105, 0.105, 0.098), hairC));
+  if (fem && !hat && r() < 0.6) p.push(boxP(-0.06, hy - 0.1, 0, 0.06, 0.24 + r() * 0.12, 0.17, hairC));
+  if (!child && r() < 0.2) p.push(boxP(-0.16, hipY + 0.33, 0, 0.12, 0.34, 0.25, pick(r, PACKS)));
+  const shY = hipY + 0.5;
+  const arm = (sd, el, hd) => {
+    p.push(between(V(0, shY, sd * 0.2), el, 0.05, top, PG.lim), P(PG.oct, TM(el.x, el.y, el.z, 0, 0, 0, 0.05, 0.05, 0.05), top));
+    p.push(between(el, hd, 0.042, top, PG.lim), P(PG.oct, TM(hd.x, hd.y, hd.z, 0, 0, 0, 0.04, 0.05, 0.035), skin));
+  };
+  const down = (sd) => arm(sd, V(-0.02, shY - 0.27, sd * 0.235), V(0.02, shY - 0.52, sd * 0.225));
+  const phone = (x, y, z, land) => p.push(boxP(x, y, z, 0.012, land ? 0.075 : 0.15, land ? 0.15 : 0.075, 0x18191c));
+  const pose = o.pose || (sit ? (r() < 0.5 ? 'film2' : 'lap') : o.rail && r() < 0.35 ? 'lean' : pick(r, POSES));
+  switch (pose) {
+    case 'film2': arm(-1, V(0.13, shY - 0.2, -0.22), V(0.33, shY + 0.08, -0.06)); arm(1, V(0.13, shY - 0.2, 0.22), V(0.33, shY + 0.08, 0.06)); phone(0.35, shY + 0.1, 0, true); break;
+    case 'filmHigh': arm(-1, V(0.14, shY + 0.1, -0.25), V(0.34, shY + 0.34, -0.12)); phone(0.36, shY + 0.42, -0.12, false); down(1); break;
+    case 'point': arm(-1, V(0.24, shY - 0.03, -0.24), V(0.5, shY + 0.06, -0.2)); down(1); break;
+    case 'wave': arm(-1, V(0.03, shY + 0.15, -0.36), V(0.07, shY + 0.42, -0.4)); down(1); break;
+    case 'lean': arm(-1, V(0.3, 1.1, -0.24), V(0.44, 1.14, -0.1)); arm(1, V(0.3, 1.1, 0.24), V(0.44, 1.14, 0.1)); break;
+    case 'pocket': arm(-1, V(-0.05, shY - 0.25, -0.25), V(0.06, hipY - 0.02, -0.16)); arm(1, V(-0.05, shY - 0.25, 0.25), V(0.06, hipY - 0.02, 0.16)); break;
+    case 'lap': arm(-1, V(0.06, shY - 0.26, -0.23), V(0.3, hipY + 0.08, -0.12)); arm(1, V(0.06, shY - 0.26, 0.23), V(0.3, hipY + 0.08, 0.12)); break;
+    default: down(-1); down(1);
+  }
+  const Yf = sit ? Y - hipY * s : Y, ph = r() * 6.283;
+  for (const q of p) q.sw = [ph, Yf, 1];
+  xform(p, TM(X, Yf, Z, 0, yaw, 0, s, s, s));
+  parts.push(...p);
+}
+// face: +1 looks toward +x, -1 toward -x, 0 uses o.yaw. When sit, y is the seat height.
+function person(parts, x, y, z, r, face, sit = false, o = {}) {
+  const yaw = (face > 0 ? 0 : face < 0 ? Math.PI : (o.yaw || 0)) + (r() - 0.5) * 0.7;
+  human(parts, x, y, z, r, yaw, Object.assign({ sit }, o));
 }
 function tree(parts, x, z, r) {
-  const base = TOP;
+  const base = TOP, i0 = parts.length;
   if (r() < 0.28) {
     const h = 3 + r() * 2.2;
     parts.push(cylP(x, base + h * 0.35, z, 0.14, h * 0.7, 0x5b4636, PG.cyl6));
@@ -654,6 +814,8 @@ function tree(parts, x, z, r) {
       parts.push(P(PG.ico, TM(x + (r() - 0.5) * 1.5, base + h + 0.5 + r() * 1.1, z + (r() - 0.5) * 1.5, r() * 3, r() * 3, 0, cr, cr * 0.85, cr), pick(r, cols)));
     }
   }
+  const ph = r() * 6.283;
+  for (let i = i0; i < parts.length; i++) parts[i].sw = [ph, base, 0.3];
 }
 function boxUV(w, h, d) {
   const g = new T.BoxGeometry(w, h, d), uv = g.attributes.uv;
@@ -714,20 +876,20 @@ function buildChunk(i) {
       matte.push(boxP(s * 8.05, TOP + 0.55, bz, 0.45, 0.06, 1.7, 0x8f6a42));
       matte.push(boxP(s * 8.3, TOP + 0.85, bz, 0.06, 0.4, 1.7, 0x8f6a42));
       for (const lz of [-0.7, 0.7]) matte.push(boxP(s * 8.12, TOP + 0.3, bz + lz, 0.4, 0.5, 0.06, 0x2c2f33));
-      if (r() < 0.6) person(matte, s * 8.12, TOP + 0.5, bz + (r() - 0.5), r, -s, true);
+      if (r() < 0.6) person(matte, s * 8.12, TOP + 0.58, bz + (r() - 0.5), r, -s, true);
     }
     // trees on the lawn
     const nt = 5 + Math.floor(r() * 4);
     for (let k = 0; k < nt; k++) tree(matte, s * (9.6 + r() * 14), -(r() * CH), r);
     // crowd watching the shark
-    const np = 7 + Math.floor(r() * 12);
+    const np = 9 + Math.floor(r() * 12);
     for (let k = 0; k < np; k++) {
       let z = r() * CH; if (z > st0 && z < st1) z = st1 + r() * 2;
-      const nearRail = r() < 0.75;
-      person(matte, s * (nearRail ? HALF + 0.55 + r() * 0.5 : 6.6 + r() * 1.6), TOP + 0.1, -Math.min(z, CH - 0.3), r, -s);
+      const nearRail = r() < 0.7;
+      person(matte, s * (nearRail ? HALF + 0.5 + r() * 0.12 : HALF + 1.0 + r() * 2.2), TOP + 0.1, -Math.min(z, CH - 0.3), r, -s, false, { rail: nearRail });
     }
     // a few walkers on the paved path
-    for (let k = 0; k < 2; k++) if (r() < 0.6) person(matte, s * (12.5 + r() * 2), TOP, -r() * CH, r, -s);
+    for (let k = 0; k < 2; k++) if (r() < 0.6) person(matte, s * (12.5 + r() * 2), TOP, -r() * CH, r, 0, false, { yaw: r() < 0.5 ? Math.PI / 2 : -Math.PI / 2, pose: r() < 0.5 ? 'down' : 'pocket' });
     // city blocks behind the park
     const nb = 1 + (r() < 0.65 ? 1 : 0);
     for (let b = 0; b < nb; b++) {
@@ -775,7 +937,7 @@ function footbridge(d, seed) {
     for (let x = -9; x <= 9; x += 1.5) metal.push(cylP(x, y + 0.7, zz * 0.97, 0.025, 1.1, 0xc5cbd0, PG.cyl6));
   }
   const n = 5 + Math.floor(r() * 6);
-  for (let k = 0; k < n; k++) { const zz = (r() < 0.5 ? 1 : -1) * (1.15 + r() * 0.2); person(matte, (r() - 0.5) * 14, y + 0.18, zz, r, 0); }
+  for (let k = 0; k < n; k++) { const zz = (r() < 0.5 ? 1 : -1) * (1.12 + r() * 0.12); person(matte, (r() - 0.5) * 14, y + 0.18, zz, r, 0, false, { yaw: zz > 0 ? -Math.PI / 2 : Math.PI / 2 }); }
   const g = new T.Group();
   const m1 = new T.Mesh(merge(matte), MAT.matte); m1.castShadow = true; m1.receiveShadow = true;
   const m2 = new T.Mesh(merge(metal), MAT.metal); m2.castShadow = true;
@@ -1065,37 +1227,103 @@ const OBJ_GEO = {
   buoy_red: merge(buoyParts('red')), buoy_green: merge(buoyParts('green')), buoy_yellow: merge(buoyParts('yellow')),
   boat: merge(boatParts()), net: merge(netParts()), pump: merge(pumpParts()), boom: merge(boomParts()), debris: merge(debrisParts()),
 };
-const netPlane = (() => { const g = new T.PlaneGeometry(5.4, 2.0); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 9, uv.getY(i) * 3.3); return g; })();
+const netPlane = (() => { const g = new T.PlaneGeometry(5.4, 1.05); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 9, uv.getY(i) * 1.75); return g; })();
+// zone: colour of the hit area drawn on the water. jump/dive: whether that manoeuvre clears it.
 const OBST = {
-  buoy: { name: '부표', hit: '부표에 쾅!', halfW: 0.75, depth: 1.4, lanes: 1 },
-  boat: { name: '구조 보트', hit: '구조 보트와 충돌!', halfW: 0.95, depth: 3.6, lanes: 1, vz: 2.4 },
-  pump: { name: '물펌프', hit: '물펌프에 부딪혔다!', halfW: 1.0, depth: 2.6, lanes: 1 },
-  debris: { name: '부유물', hit: '부유물에 걸렸다!', halfW: 0.95, depth: 1.8, lanes: 1 },
-  net: { name: '그물', hit: '그물에 걸렸다!', halfW: 2.55, depth: 1.0, lanes: 2 },
-  boom: { name: '오일펜스', hit: '오일펜스에 막혔다!', halfW: 2.55, depth: 0.9, lanes: 2 },
+  buoy: { name: '부표', hit: '부표에 쾅!', halfW: 0.75, depth: 1.4, y0: -0.6, y1: 2.7, zone: 'dodge' },
+  pump: { name: '물펌프', hit: '물펌프에 부딪혔다!', halfW: 1.0, depth: 2.6, y0: -0.5, y1: 1.3, zone: 'dodge' },
+  boat: { name: '구조 보트', hit: '구조 보트와 충돌!', halfW: 0.95, depth: 3.6, y0: -0.2, y1: 1.1, vz: 2.4, dive: true, zone: 'dive' },
+  net: { name: '그물', hit: '그물에 걸렸다!', halfW: 2.55, depth: 1.0, y0: -1.05, y1: 0.35, dive: true, zone: 'dive' },
+  debris: { name: '부유물', hit: '부유물에 걸렸다!', halfW: 0.95, depth: 1.8, y0: -0.15, y1: 0.3, jump: true, zone: 'jump' },
+  boom: { name: '오일펜스', hit: '오일펜스에 막혔다!', halfW: 2.55, depth: 0.9, y0: -0.65, y1: 0.35, jump: true, dive: true, zone: 'both' },
 };
+function zoneTex(rgb, kind) {
+  const c = (a) => `rgba(${rgb},${a})`;
+  return ctex(256, 256, (g, w, h) => {
+    const x0 = 10, y0 = 10, ww = w - 20, hh = h - 20, rr = 34;
+    const path = () => { g.beginPath(); g.moveTo(x0 + rr, y0); g.arcTo(x0 + ww, y0, x0 + ww, y0 + hh, rr); g.arcTo(x0 + ww, y0 + hh, x0, y0 + hh, rr); g.arcTo(x0, y0 + hh, x0, y0, rr); g.arcTo(x0, y0, x0 + ww, y0, rr); g.closePath(); };
+    g.clearRect(0, 0, w, h);
+    path(); g.fillStyle = c(0.24); g.fill();
+    if (kind === 'dodge') { g.save(); path(); g.clip(); g.strokeStyle = c(0.42); g.lineWidth = 16; for (let k = -h; k < w; k += 46) { g.beginPath(); g.moveTo(k, h); g.lineTo(k + h, 0); g.stroke(); } g.restore(); }
+    path(); g.lineWidth = 12; g.strokeStyle = c(0.95); g.stroke();
+    const chev = (cy, dir) => { g.beginPath(); g.moveTo(w / 2 - 54, cy + dir * 24); g.lineTo(w / 2, cy - dir * 24); g.lineTo(w / 2 + 54, cy + dir * 24); g.lineWidth = 20; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = c(0.98); g.stroke(); };
+    if (kind === 'jump') { chev(100, 1); chev(156, 1); }
+    if (kind === 'dive') { chev(100, -1); chev(156, -1); }
+    if (kind === 'both') { chev(90, 1); chev(166, -1); }
+  });
+}
+const ZRGB = { dodge: '255,74,61', dive: '63,182,255', jump: '255,197,61', both: '255,197,61' };
+const ZT = {}, ZI = {};
+for (const k in ZRGB) ZT[k] = zoneTex(ZRGB[k], k);
+// Floating action icon above each hitbox: <-> dodge, down = dive, up = jump.
+function iconTex(rgb, kind) {
+  return ctex(128, 128, (g, w) => {
+    g.clearRect(0, 0, w, w);
+    g.beginPath(); g.arc(64, 64, 56, 0, 7); g.fillStyle = 'rgba(12,34,48,0.78)'; g.fill();
+    g.lineWidth = 8; g.strokeStyle = `rgb(${rgb})`; g.stroke();
+    g.lineWidth = 11; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#ffffff';
+    const arrow = (x0, y0, x1, y1) => {
+      const a = Math.atan2(y1 - y0, x1 - x0), L = 17;
+      g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1);
+      g.moveTo(x1 - L * Math.cos(a - 0.65), y1 - L * Math.sin(a - 0.65)); g.lineTo(x1, y1); g.lineTo(x1 - L * Math.cos(a + 0.65), y1 - L * Math.sin(a + 0.65)); g.stroke();
+    };
+    if (kind === 'dodge') { arrow(64, 64, 30, 64); arrow(64, 64, 98, 64); }
+    if (kind === 'dive') arrow(64, 32, 64, 96);
+    if (kind === 'jump') arrow(64, 96, 64, 32);
+    if (kind === 'both') { arrow(46, 92, 46, 36); arrow(82, 36, 82, 92); }
+  }, true);
+}
+for (const k in ZRGB) ZI[k] = iconTex(ZRGB[k], k);
+// Edge frame of a w x h x d box built from thin bars (GL lines are 1 px, too thin to read).
+function frameGeo(w, h, d, t = 0.075) {
+  const parts = [], X = w / 2, Y = h / 2, Z = d / 2;
+  for (const a of [-1, 1]) for (const b of [-1, 1]) {
+    parts.push(boxP(0, a * Y, b * Z, w + t, t, t, 0xffffff));
+    parts.push(boxP(a * X, 0, b * Z, t, h + t, t, 0xffffff));
+    parts.push(boxP(a * X, b * Y, 0, t, t, d + t, 0xffffff));
+  }
+  return merge(parts);
+}
 const pools = {}; const obstacles = [];
 function acquire(type) {
   const pool = pools[type] || (pools[type] = []);
-  let m = pool.pop();
-  if (!m) {
-    m = new T.Mesh(OBJ_GEO[type === 'buoy' ? 'buoy_red' : type], MAT.obj); m.castShadow = true;
-    if (type === 'net') { const np = new T.Mesh(netPlane, MAT.net); np.position.y = -0.95; m.add(np); }
-    scene.add(m);
+  let e = pool.pop();
+  if (!e) {
+    const def = OBST[type];
+    const mesh = new T.Mesh(OBJ_GEO[type === 'buoy' ? 'buoy_red' : type], MAT.obj); mesh.castShadow = true;
+    if (type === 'net') { const np = new T.Mesh(netPlane, MAT.net); np.position.y = -0.47; mesh.add(np); }
+    // hitbox shown to the player: footprint on the water + translucent volume with a bright frame
+    // + floating action icon. x/z extents are exactly those used by the collision test.
+    const W = def.halfW * 2, D = def.depth, H = def.y1 - def.y0, col = new T.Color(`rgb(${ZRGB[def.zone]})`).convertSRGBToLinear();
+    const zone = new T.Group();
+    const decal = new T.Mesh(PG.planeH, new T.MeshBasicMaterial({ map: ZT[def.zone], transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+    decal.scale.set(W, 1, Math.max(D, 1.4)); decal.position.y = 0.03; decal.renderOrder = 2;
+    const fill = new T.Mesh(PG.box, new T.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+    fill.scale.set(W, H, D); fill.position.y = (def.y0 + def.y1) / 2; fill.renderOrder = 2;
+    const frame = new T.Mesh(frameGeo(W, H, D), new T.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+    frame.position.y = fill.position.y; frame.renderOrder = 2;
+    const icon = new T.Sprite(new T.SpriteMaterial({ map: ZI[def.zone], transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+    icon.scale.set(1.0, 1.0, 1); icon.position.y = Math.max(def.y1, 0.6) + 0.9; icon.renderOrder = 4;
+    zone.add(decal, fill, frame, icon);
+    zone.userData.mats = [[decal.material, 1], [fill.material, 0.14], [frame.material, 0.95], [icon.material, 1]];
+    zone.userData.op = 0;
+    scene.add(mesh, zone); e = { mesh, zone };
   }
-  if (type === 'buoy') m.geometry = OBJ_GEO['buoy_' + pick(Math.random, ['red', 'red', 'green', 'yellow'])];
-  m.visible = true; m.rotation.set(0, 0, 0); m.scale.setScalar(1);
-  return m;
+  if (type === 'buoy') e.mesh.geometry = OBJ_GEO['buoy_' + pick(Math.random, ['red', 'red', 'green', 'yellow'])];
+  e.mesh.visible = e.zone.visible = true; e.mesh.rotation.set(0, 0, 0); e.mesh.scale.setScalar(1); setZoneOp(e.zone, 0);
+  return e;
 }
 function addObs(type, cx, d) {
-  const def = OBST[type], mesh = acquire(type);
+  const def = OBST[type], e = acquire(type);
   let dd = d;
   if (def.vz) dd = d + def.vz * (d - G.dist) / Math.max(G.speed, 10);
-  mesh.position.set(cx, 0, -dd);
-  if (type === 'debris' || type === 'pump') mesh.rotation.y = Math.random() * 0.6 - 0.3;
-  obstacles.push({ type, def, mesh, cx, hit: false, ht: 0, ph: Math.random() * 6.28 });
+  e.mesh.position.set(cx, 0, -dd);
+  if (type === 'debris' || type === 'pump') e.mesh.rotation.y = Math.random() * 0.6 - 0.3;
+  obstacles.push({ type, def, e, mesh: e.mesh, zone: e.zone, cx, hit: false, cleared: false, ht: 0, ph: Math.random() * 6.28 });
 }
-function clearObstacles() { for (const o of obstacles) { o.mesh.visible = false; pools[o.type].push(o.mesh); } obstacles.length = 0; }
+function setZoneOp(z, op) { z.userData.op = op; for (const [m, k] of z.userData.mats) m.opacity = op * k; }
+function release(o) { o.mesh.visible = o.zone.visible = false; pools[o.type].push(o.e); }
+function clearObstacles() { for (const o of obstacles) release(o); obstacles.length = 0; }
 
 /* ================= mackerel pickups ================= */
 const fishGeo = (() => {
@@ -1136,7 +1364,7 @@ function emit(x, y, z, vx, vy, vz, life, c, grav) {
   pPos[k] = x; pPos[k + 1] = y; pPos[k + 2] = z; pVel[k] = vx; pVel[k + 1] = vy; pVel[k + 2] = vz;
   pBase[k] = c[0]; pBase[k + 1] = c[1]; pBase[k + 2] = c[2]; pLife[i] = life; pMax[i] = life; pGrav[i] = grav ? 1 : 0;
 }
-const SPRAY = [0.7, 0.8, 0.85], FOAM = [0.16, 0.18, 0.19], GOLD = [1.0, 0.75, 0.3];
+const SPRAY = [0.7, 0.8, 0.85], SPRAY_S = [0.35, 0.4, 0.42], FOAM = [0.16, 0.18, 0.19], GOLD = [1.0, 0.75, 0.3];
 function splash(x, z, n, power = 1, c = SPRAY) {
   for (let i = 0; i < n; i++) {
     const a = Math.random() * 6.283, sp = (0.6 + Math.random() * 2.2) * power;
@@ -1190,6 +1418,10 @@ const Snd = {
     s.connect(f); f.connect(g); g.connect(this.master); s.start(t, Math.random()); s.stop(t + dur + 0.05);
   },
   fish() { this.tone(880, 0.12, 'triangle', 0.16, 1.4); this.tone(1320, 0.16, 'triangle', 0.12, 1.2, 0.07); },
+  jump() { this.noise(0.25, 900, 0.7, 0.8); this.tone(330, 0.25, 'triangle', 0.12, 1.8); },
+  dive() { this.noise(0.4, 260, 1.0, 0.7); this.tone(220, 0.32, 'sine', 0.14, 0.5); },
+  splash() { this.noise(0.45, 700, 1.1, 0.6); },
+  clear() { this.tone(660, 0.1, 'triangle', 0.14, 1.5); this.tone(990, 0.14, 'triangle', 0.1, 1.3, 0.06); },
   hit() { this.noise(0.4, 380, 1.4, 0.8); this.tone(110, 0.35, 'sine', 0.45, 0.45); },
   swish() { this.noise(0.2, 1300, 0.6, 0.9); },
   win() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.35, 'triangle', 0.16, 1, i * 0.12)); },
@@ -1198,10 +1430,12 @@ const Snd = {
 };
 
 /* ================= game state ================= */
-const G = { dist: 0, speed: 0, lives: 3, fish: 0, time: 0, lane: 1, x: 0, vx: 0, invuln: 0, speedMul: 1, shake: 0, phase: 0, nextRow: 70, endT: 0, ms: 0, lastLaneT: 0 };
+const G = { dist: 0, speed: 0, lives: 3, fish: 0, time: 0, lane: 1, x: 0, vx: 0, invuln: 0, speedMul: 1, shake: 0, phase: 0, nextRow: 70, endT: 0, ms: 0, vmode: 'swim', vt: 0, prevY: SHARK_Y, pitch: 0, wake: 0 };
+const JT = 0.8, DT = 1.25, JUMP_H = 1.75, DIVE_D = 1.4;   // jump/dive duration (s), height/depth (m)
 let state = 'title';
 const MILESTONES = [
   { d: 5, msg: '출발! 바다까지 1,400 m' },
+  { d: 45, msg: '↑ 점프 · ↓ 잠수로 그물과 부유물을 넘어요' },
   { d: CANAL_END - 220, msg: '수로 출구까지 200 m' },
   { d: CANAL_END + 5, msg: '북항 진입! 수로를 빠져나왔다' },
   { d: GOAL - 160, msg: '방파제 등대가 보인다. 조금만 더!' },
@@ -1233,7 +1467,7 @@ function toast(msg, bad = false) { ui.toast.textContent = msg; ui.toast.classNam
 
 function resetRun() {
   clearObstacles(); clearFish(); resetChunks();
-  Object.assign(G, { dist: 0, speed: 0, lives: 3, fish: 0, time: 0, lane: 1, x: 0, vx: 0, invuln: 0, speedMul: 1, shake: 0, nextRow: 70, endT: 0, ms: 0 });
+  Object.assign(G, { dist: 0, speed: 0, lives: 3, fish: 0, time: 0, lane: 1, x: 0, vx: 0, invuln: 0, speedMul: 1, shake: 0, nextRow: 70, endT: 0, ms: 0, vmode: 'swim', vt: 0, prevY: SHARK_Y, pitch: 0 });
   ui.fishN.textContent = '0'; renderLives();
 }
 function withFade(fn) { ui.fade.classList.add('on'); setTimeout(() => { fn(); ui.fade.classList.remove('on'); }, 360); }
@@ -1255,7 +1489,32 @@ function move(dir) {
   const nl = clamp(G.lane + dir, 0, 2);
   if (nl === G.lane) return;
   G.lane = nl; Snd.swish();
-  for (let i = 0; i < 10; i++) emit(G.x + (Math.random() - 0.5) * 0.4, 0.05, -G.dist + 1.2, -dir * (1 + Math.random() * 1.5), 1 + Math.random() * 1.6, 1 + Math.random(), 0.5, SPRAY, true);
+  if (G.vmode !== 'jump') {
+    for (let i = 0; i < 10; i++) emit(G.x + (Math.random() - 0.5) * 0.4, 0.05, -G.dist + 1.2, -dir * (1 + Math.random() * 1.5), 1 + Math.random() * 1.6, 1 + Math.random(), 0.5, SPRAY, true);
+    addRing(G.x, -G.dist + 0.8, 0.35);
+  }
+}
+function addRing(x, z, str) { ringV[ringI].set(x, z, clock, str); ringI = (ringI + 1) % 4; }
+function jump() {
+  if (state !== 'play' || G.vmode !== 'swim') return;
+  G.vmode = 'jump'; G.vt = 0; Snd.jump();
+  splash(G.x, -G.dist - 0.6, 26, 0.9); addRing(G.x, -G.dist, 0.9);
+}
+function dive() {
+  if (state !== 'play' || G.vmode !== 'swim') return;
+  G.vmode = 'dive'; G.vt = 0; Snd.dive();
+  splash(G.x, -G.dist + 0.6, 14, 0.6); addRing(G.x, -G.dist, 0.8);
+}
+function endVertical() {
+  const wasJump = G.vmode === 'jump';
+  G.vmode = 'swim'; G.vt = 0;
+  if (state !== 'play') return;
+  if (wasJump) { splash(G.x, -G.dist - 0.5, 50, 1.2); addRing(G.x, -G.dist, 1.3); Snd.splash(); }
+  else { addRing(G.x, -G.dist, 0.6); for (let i = 0; i < 16; i++) emit(G.x + (Math.random() - 0.5) * 0.8, 0.04, -G.dist + Math.random() * 1.5, (Math.random() - 0.5) * 1.2, 0.1, 0.4, 0.9, FOAM, false); }
+}
+function cleared(o, air) {
+  o.cleared = true; Snd.clear();
+  toast(air ? `${o.def.name} 점프 통과!` : `${o.def.name} 밑으로 통과!`);
 }
 
 function spawnRow(d) {
@@ -1279,12 +1538,12 @@ function spawnRow(d) {
 
 function hit(o) {
   o.hit = true; G.lives--; G.invuln = 1.7; G.speedMul = 0.42; G.shake = 0.7;
-  renderLives(); Snd.hit(); splash(G.x, -G.dist - 1.2, 46, 1.2);
+  renderLives(); Snd.hit(); splash(G.x, -G.dist - 1.2, 46, 1.2); addRing(G.x, -G.dist - 1.2, 1.2);
   toast(o.def.hit, true);
   if (navigator.vibrate) { try { navigator.vibrate(120); } catch (e) { /* ignore */ } }
   if (G.lives <= 0) { state = 'over'; G.endT = 0; Snd.lose(); ui.hud.hidden = true; }
 }
-function win() { state = 'win'; G.endT = 0; Snd.win(); ui.hud.hidden = true; toast('탈출 성공!'); }
+function win() { G.vmode = 'swim'; G.vt = 0; state = 'win'; G.endT = 0; Snd.win(); ui.hud.hidden = true; toast('탈출 성공!'); }
 function showResult(won) {
   $('resEyebrow').textContent = won ? '부산항 방파제 통과' : '친수공원 인공수로';
   $('resTitle').textContent = won ? '부캉이, 바다로!' : '다시 수로로…';
@@ -1311,20 +1570,32 @@ function showResult(won) {
 addEventListener('keydown', (e) => {
   if (e.repeat) return;
   const k = e.key;
-  if (k === 'ArrowLeft' || k === 'a' || k === 'A') { move(-1); e.preventDefault(); }
+  if ((k === ' ' || k === 'Enter') && state === 'title' && document.activeElement === document.body) { startGame(); e.preventDefault(); }
+  else if (k === 'ArrowLeft' || k === 'a' || k === 'A') { move(-1); e.preventDefault(); }
   else if (k === 'ArrowRight' || k === 'd' || k === 'D') { move(1); e.preventDefault(); }
+  else if (k === 'ArrowUp' || k === 'w' || k === 'W' || (k === ' ' && state === 'play')) { jump(); e.preventDefault(); }
+  else if (k === 'ArrowDown' || k === 's' || k === 'S') { dive(); e.preventDefault(); }
   else if (k === 'Escape' || k === 'p' || k === 'P') { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }
-  else if ((k === ' ' || k === 'Enter') && state === 'title' && document.activeElement === document.body) { startGame(); e.preventDefault(); }
 });
+// One action per finger stroke. A slow drag must travel ~12% of the short screen side;
+// a quick flick (< 220 ms) is accepted at 60% of that distance.
 const app = $('app'); let sw = null;
-app.addEventListener('pointerdown', (e) => { if (e.target.closest('button, .card')) return; sw = { x: e.clientX, y: e.clientY, id: e.pointerId }; });
+const swipeTh = () => Math.max(48, Math.min(innerWidth, innerHeight) * 0.12);
+function swipeAct(dx, dy, th) {
+  if (Math.abs(dx) > th && Math.abs(dx) > Math.abs(dy) * 1.3) { move(dx > 0 ? 1 : -1); return true; }
+  if (Math.abs(dy) > th && Math.abs(dy) > Math.abs(dx) * 1.3) { if (dy < 0) jump(); else dive(); return true; }
+  return false;
+}
+app.addEventListener('pointerdown', (e) => { if (e.target.closest('button, .card')) return; sw = { x: e.clientX, y: e.clientY, id: e.pointerId, t: performance.now(), done: false }; });
 app.addEventListener('pointermove', (e) => {
-  if (!sw || e.pointerId !== sw.id) return;
-  const dx = e.clientX - sw.x, dy = e.clientY - sw.y, th = Math.max(26, innerWidth * 0.045);
-  if (Math.abs(dx) > th && Math.abs(dx) > Math.abs(dy) * 0.8) { move(dx > 0 ? 1 : -1); sw.x = e.clientX; sw.y = e.clientY; }
+  if (!sw || sw.done || e.pointerId !== sw.id) return;
+  sw.done = swipeAct(e.clientX - sw.x, e.clientY - sw.y, swipeTh());
 });
-const endSw = () => { sw = null; };
-app.addEventListener('pointerup', endSw); app.addEventListener('pointercancel', endSw);
+app.addEventListener('pointerup', (e) => {
+  if (sw && !sw.done && e.pointerId === sw.id && performance.now() - sw.t < 220) swipeAct(e.clientX - sw.x, e.clientY - sw.y, swipeTh() * 0.6);
+  sw = null;
+});
+app.addEventListener('pointercancel', () => { sw = null; });
 $('btnStart').addEventListener('click', startGame);
 $('btnRetry').addEventListener('click', startGame);
 $('btnHome').addEventListener('click', goHome);
@@ -1375,37 +1646,54 @@ function update(dt) {
 
   // lateral dynamics: critically-damped spring toward lane centre
   if (state !== 'paused') {
-    const xt = LANES[G.lane], wn = 10.5, zeta = 0.82;
+    const xt = LANES[G.lane], wn = 9, zeta = 0.85;
     const ax = wn * wn * (xt - G.x) - 2 * zeta * wn * G.vx;
     G.vx += ax * dt; G.x += G.vx * dt;
   }
   const sz = -G.dist;
 
-  // shark pose + swimming wave
-  let sy = SHARK_Y + Math.sin(clock * 1.9) * 0.025, pitch = Math.sin(clock * 1.9 + 1) * 0.02;
+  // vertical manoeuvres: jump (up) and dive (down)
+  if (G.vmode !== 'swim' && state !== 'paused') { G.vt += dt; if (G.vt >= (G.vmode === 'jump' ? JT : DT)) endVertical(); }
+  let vyo = 0;
+  if (G.vmode === 'jump') vyo = JUMP_H * Math.sin(Math.PI * G.vt / JT);
+  else if (G.vmode === 'dive') vyo = -DIVE_D * Math.min(1, 1.7 * Math.sin(Math.PI * G.vt / DT));
+  let sy = SHARK_Y + vyo + (G.vmode === 'swim' ? Math.sin(clock * 1.9) * 0.025 : 0);
   if (state === 'win') {
     const t = G.endT - 0.25;
-    if (t > 0 && t < 1.25) { const u = t / 1.25; sy = SHARK_Y + 3.0 * Math.sin(Math.PI * u); pitch = 0.75 * Math.cos(Math.PI * u); }
-    if (t > 0 && t - dt <= 0) splash(G.x, sz, 60, 1.3);
-    if (t > 1.25 && t - dt <= 1.25) splash(G.x, sz - 2, 90, 1.6);
+    if (t > 0 && t < 1.25) sy = SHARK_Y + 3.0 * Math.sin(Math.PI * t / 1.25);
+    if (t > 0 && t - dt <= 0) { splash(G.x, sz, 60, 1.3); addRing(G.x, sz, 1.2); }
+    if (t > 1.25 && t - dt <= 1.25) { splash(G.x, sz - 2, 90, 1.6); addRing(G.x, sz - 2, 1.5); }
   }
-  if (state === 'over') { sy = SHARK_Y - Math.min(0.5, G.endT * 0.4); }
+  if (state === 'over') sy = SHARK_Y - Math.min(0.5, G.endT * 0.4);
+  // pitch follows the vertical velocity (nose up on the way out, down on the way in)
+  if (state !== 'paused') {
+    const vel = (sy - G.prevY) / Math.max(dt, 1e-3);
+    G.pitch += (clamp(vel * (G.vmode === 'dive' ? 0.075 : 0.12), -0.65, 0.65) + Math.sin(clock * 1.9 + 1) * 0.02 - G.pitch) * Math.min(1, dt * 12);
+  }
+  G.prevY = sy;
+  const yo = sy - SHARK_Y;
   shark.position.set(G.x, sy, sz);
-  sharkMesh.rotation.set(pitch, -G.vx * 0.075, -G.vx * 0.055);
-  const freq = state === 'title' ? 1.05 : state === 'over' ? Math.max(0.3, 1.4 - G.endT) : 1.1 + G.speed * 0.055 + Math.abs(G.vx) * 0.22;
+  sharkMesh.rotation.set(G.pitch, -Math.atan2(G.vx, Math.max(G.speed, 6)) * 0.85, -G.vx * 0.05);
+  const freq = state === 'title' ? 1.05 : state === 'over' ? Math.max(0.3, 1.4 - G.endT) : 1.1 + G.speed * 0.055 + Math.abs(G.vx) * 0.22 + (G.vmode === 'dive' ? 0.6 : 0);
   G.phase += dt * Math.PI * 2 * (state === 'paused' ? 0 : freq);
   sharkU.uPhase.value = G.phase;
   sharkU.uAmp.value += ((0.1 + Math.min(0.1, Math.abs(G.vx) * 0.035)) - sharkU.uAmp.value) * Math.min(1, dt * 6);
   sharkU.uBend.value += (clamp(G.vx * 0.045, -0.16, 0.16) - sharkU.uBend.value) * Math.min(1, dt * 8);
   shark.visible = !(G.invuln > 0 && Math.floor(G.invuln * 12) % 2 === 0);
 
-  // wake foam from the dorsal fin
-  if (state === 'play' || state === 'win' || state === 'title') {
-    if (Math.random() < (state === 'title' ? 0.5 : 0.9)) {
-      const s = Math.random() < 0.5 ? -1 : 1;
-      emit(G.x + s * 0.06, 0.04, sz - 0.25 + Math.random() * 0.3, s * (0.4 + Math.random() * 0.6), 0.05, 0.6, 0.6, FOAM, false);
-    }
+  // surface wake strength: fades when the fin leaves the surface (jump) or goes deep (dive)
+  const depthK = yo > 0 ? clamp(1 - yo / 0.45, 0, 1) : clamp(1 + yo / 1.0, 0.1, 1);
+  const wakeT = (state === 'title' ? 0.3 : clamp(G.speed / 12, 0, 1.4)) * depthK;
+  G.wake += (wakeT - G.wake) * Math.min(1, dt * 4);
+  waterU.uShark.value.set(G.x, sz, Math.max(G.speed, 1), G.wake);
+  waterU.uLaneX.value += (LANES[G.lane] - waterU.uLaneX.value) * Math.min(1, dt * 12);
+  waterU.uLane.value += ((state === 'play' || state === 'paused' ? 1 : 0) - waterU.uLane.value) * Math.min(1, dt * 3);
+  crowdU.uT.value = clock; crowdU.uSZ.value = sz;
+  if (state !== 'paused' && Math.abs(yo) < 0.25 && Math.random() < (state === 'title' ? 0.25 : 0.6)) {
+    const sd = Math.random() < 0.5 ? -1 : 1;
+    emit(G.x + sd * 0.05, 0.06, sz - 0.3, sd * (0.3 + Math.random() * 0.5), 0.4 + Math.random() * 0.6, 0.4, 0.45, SPRAY_S, true);
   }
+  if (G.vmode === 'dive' && state !== 'paused' && Math.random() < 0.5) emit(G.x + (Math.random() - 0.5) * 0.6, 0.04, sz + Math.random(), (Math.random() - 0.5) * 0.4, 0.05, 0.3, 0.8, FOAM, false);
 
   // recycle park chunks
   for (const c of chunks) {
@@ -1415,8 +1703,9 @@ function update(dt) {
   }
 
   // obstacles
+  const air = yo > 0.95, deep = yo < -0.95;
   for (let i = obstacles.length - 1; i >= 0; i--) {
-    const o = obstacles[i], m = o.mesh;
+    const o = obstacles[i], m = o.mesh, zn = o.zone;
     if (state !== 'paused') {
       if (o.def.vz && !o.hit) m.position.z += o.def.vz * dt;
       o.ph += dt;
@@ -1424,11 +1713,20 @@ function update(dt) {
       m.rotation.z = Math.sin(o.ph * 1.3) * 0.04; m.rotation.x = Math.sin(o.ph * 1.1 + 1) * 0.03;
       if (o.hit) { o.ht += dt; m.position.y -= o.ht * 0.8; m.rotation.z += (o.cx >= G.x ? 1 : -1) * Math.min(1, o.ht * 2) * 0.6; m.position.x = o.cx + (o.cx >= G.x ? 1 : -1) * o.ht * 2.5; }
     }
-    if (state === 'play' && !o.hit && G.invuln <= 0) {
+    // hit zone on the water: pulses when close, fades once passed, cleared or hit
+    zn.position.set(o.cx, 0, m.position.z);
+    const ahead = m.position.z - sz;
+    let op = (o.hit || o.cleared || ahead > 2.5) ? 0 : 0.85;
+    op *= 0.7 + 0.3 * (1 - smooth(8, 40, -ahead)) * (0.5 + 0.5 * Math.sin(clock * 9));
+    setZoneOp(zn, zn.userData.op + (op - zn.userData.op) * Math.min(1, dt * 10));
+    if (state === 'play' && !o.hit && !o.cleared && G.invuln <= 0) {
       const dz = Math.abs(m.position.z - (sz - 0.4));
-      if (dz < o.def.depth / 2 + 1.0 && Math.abs(G.x - o.cx) < o.def.halfW + 0.28) hit(o);
+      if (dz < o.def.depth / 2 + 1.0 && Math.abs(G.x - o.cx) < o.def.halfW + 0.28) {
+        if ((air && o.def.jump) || (deep && o.def.dive)) cleared(o, air);
+        else hit(o);
+      }
     }
-    if (m.position.z > sz + 14 || (o.hit && o.ht > 2)) { m.visible = false; pools[o.type].push(m); obstacles.splice(i, 1); }
+    if (m.position.z > sz + 14 || (o.hit && o.ht > 2)) { release(o); obstacles.splice(i, 1); }
   }
 
   // mackerel
@@ -1439,8 +1737,8 @@ function update(dt) {
       const jump = Math.max(0, Math.sin(f.ph * 3.0));
       m.position.set(f.x + Math.sin(f.ph * 1.3) * 0.15, -0.12 + jump * 0.65, f.z);
       m.rotation.set(-Math.cos(f.ph * 3.0) * 0.7 * (jump > 0 ? 1 : 0.2), Math.sin(f.ph * 9) * 0.25, 0);
-      if (state === 'play' && Math.abs(f.z - (sz - 0.6)) < 1.25 && Math.abs(G.x - f.x) < 1.0) {
-        f.got = true; G.fish++; ui.fishN.textContent = G.fish; Snd.fish();
+      if (state === 'play' && !deep && Math.abs(f.z - (sz - 0.6)) < 1.25 && Math.abs(G.x - f.x) < 1.0) {
+        f.got = true; G.fish++; ui.fishN.textContent = G.fish; Snd.fish(); addRing(f.x, f.z, 0.4);
         for (let k = 0; k < 14; k++) emit(f.x, 0.4, f.z, (Math.random() - 0.5) * 3, 1 + Math.random() * 2.5, (Math.random() - 0.5) * 3, 0.6, GOLD, true);
       }
     } else {
@@ -1499,7 +1797,7 @@ function frame(now) {
 }
 resetRun();
 requestAnimationFrame((t) => { last = t; frame(t); });
-window.__bukangi = { G, get state() { return state; }, move, startGame };
+window.__bukangi = { G, get state() { return state; }, move, jump, dive, startGame, obstacles, addObs, clearObstacles };
 })();
 </script>
 </body>
