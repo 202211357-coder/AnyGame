@@ -100,6 +100,16 @@ h2 { font-size: clamp(34px, 6vw, 48px); }
   flex: none; min-width: 52px; padding: 4px 8px; text-align: center; border-radius: 8px;
   border: 1px solid rgba(242, 247, 246, .25); font-size: 12px; font-weight: 600; color: var(--foam);
 }
+.mode { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mode-btn {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; text-align: left; cursor: pointer;
+  padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(242, 247, 246, .22); background: transparent;
+  color: var(--foam); font-family: var(--font-body); transition: border-color .15s, background .15s;
+}
+.mode-btn b { font-family: var(--font-display); font-weight: 400; font-size: 19px; }
+.mode-btn small { font-size: 12px; color: var(--mist); }
+.mode-btn[aria-checked="true"] { border-color: var(--buoy); background: rgba(255, 122, 46, .14); }
+.mode-btn:focus-visible { outline: 3px solid var(--buoy); outline-offset: 2px; }
 .cta {
   border: 0; cursor: pointer; border-radius: 14px; padding: 15px 22px; margin-top: 4px;
   font-family: var(--font-display); font-size: 21px; color: var(--harbor); background: var(--buoy);
@@ -189,6 +199,10 @@ h2 { font-size: clamp(34px, 6vw, 48px); }
         <li><span class="key">↑ ↓</span><span>위로 밀면 점프, 아래로 밀면 잠수<span class="kb"> (키보드 ↑ ↓ · W S)</span></span></li>
         <li><span class="key">체력 3</span>세 번 부딪히면 실패, 고등어는 점수</li>
       </ul>
+      <div class="mode" role="radiogroup" aria-label="난이도">
+        <button type="button" class="mode-btn" role="radio" data-mode="normal" aria-checked="true"><b>보통</b><small>최고 속도 22 m/s</small></button>
+        <button type="button" class="mode-btn" role="radio" data-mode="hard" aria-checked="false"><b>어려움</b><small>최고 속도 26 m/s, 더 촘촘하게</small></button>
+      </div>
       <button class="cta" id="btnStart">바다로 헤엄치기</button>
       <p class="best" id="bestLine"></p>
     </div>
@@ -1296,7 +1310,8 @@ function acquire(type) {
 function addObs(type, cx, d, from) {
   const def = OBST[type], e = acquire(type);
   let dd = d;
-  if (def.vz) dd = d + def.vz * (d - G.dist) / Math.max(G.speed, vAt(G.dist));
+  // moving boats: start far enough out to reach row d when the (accelerating) shark does
+  if (def.vz) dd = d + def.vz * (d - G.dist) / ((vAt(G.dist) + vAt(d)) / 2);
   const x0 = from === undefined ? cx : from;
   e.mesh.position.set(x0, 0, -dd);
   e.mesh.rotation.y = (type === 'debris' || type === 'pump') ? Math.random() * 0.6 - 0.3 : 0;
@@ -1436,9 +1451,25 @@ Snd.muted = !!store('bukangi-muted');
 const renderMute = () => { $('btnMute').innerHTML = Snd.muted ? SND_OFF : SND_ON; $('btnMute').setAttribute('aria-label', Snd.muted ? '소리 켜기' : '소리 끄기'); };
 renderMute();
 const fmtTime = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+// Difficulty. v: cruise speed start/end (m/s). gap: time between rows start/end (s) + random extra.
+// one/all: share of rows blocking one lane / every lane (start, end). cut: lane-cutting boats
+// (from course fraction, chance). Hard is the tuning players asked for after "too easy".
+const DIFF = {
+  normal: { label: '보통', v: [12, 22], gap: [1.6, 0.85], gapR: 0.4, one: [0.35, 0.12], all: [0.06, 0.25], cut: [0.5, 0.25], invuln: 1.4, slow: 0.5 },
+  hard: { label: '어려움', v: [13, 26], gap: [1.25, 0.62], gapR: 0.35, one: [0.28, 0.06], all: [0.14, 0.4], cut: [0.3, 0.4], invuln: 1.1, slow: 0.62 },
+};
+let mode = store('bukangi-mode') === 'hard' ? 'hard' : 'normal';
+let D = DIFF[mode];
+const bestKey = () => (mode === 'hard' ? 'bukangi-best-v2' : 'bukangi-best-normal');
+function setMode(m) {
+  if (state !== 'title' || !DIFF[m]) return;
+  mode = m; D = DIFF[m]; store('bukangi-mode', m);
+  document.querySelectorAll('.mode-btn').forEach(b => b.setAttribute('aria-checked', String(b.dataset.mode === m)));
+  renderBest();
+}
 function renderBest() {
-  const b = store('bukangi-best-v2');
-  ui.best.textContent = b && b.time ? `최고 기록 ${fmtTime(b.time)} · 고등어 ${b.fish}마리` : '';
+  const b = store(bestKey());
+  ui.best.textContent = b && b.time ? `${D.label} 최고 기록 ${fmtTime(b.time)} · 고등어 ${b.fish}마리` : '';
 }
 renderBest();
 function renderLives() { [...ui.lives.children].forEach((el, i) => el.classList.toggle('lost', i >= G.lives)); }
@@ -1499,7 +1530,7 @@ function cleared(o, air) {
 }
 
 // Cruise speed along the course: 13 m/s at the start -> 26 m/s at the breakwater.
-const vAt = (d) => 13 + 13 * Math.pow(clamp(d / GOAL, 0, 1), 1.1);
+const vAt = (d) => D.v[0] + (D.v[1] - D.v[0]) * Math.pow(clamp(d / GOAL, 0, 1), 1.1);
 const lerp = (a, b, t) => a + (b - a) * t;
 const GEN0 = { lastD: 0, lastPass: [0, 1, 2], lastForced: false };
 // One candidate row. items: {type, lane} (single) or {type, lane, wide} (two lanes lane, lane+1).
@@ -1508,7 +1539,7 @@ function makeRow(p, harbor) {
   const vert1 = harbor ? ['debris', 'boat', 'boat'] : ['debris', 'boat'];
   const wide = harbor ? ['boom'] : ['net', 'boom'];
   const single = () => pick(Math.random, Math.random() < 0.55 ? dodge : vert1);
-  const r = Math.random(), pr1 = lerp(0.28, 0.06, p), pr3 = lerp(0.14, 0.4, p);
+  const r = Math.random(), pr1 = lerp(D.one[0], D.one[1], p), pr3 = lerp(D.all[0], D.all[1], p);
   const items = [];
   if (r < pr1) {
     items.push({ type: single(), lane: Math.floor(Math.random() * 3) });
@@ -1547,7 +1578,7 @@ function spawnRow(d) {
     const cx = it.wide ? (LANES[it.lane] + LANES[it.lane + 1]) / 2 : LANES[it.lane];
     let from;
     // later in the course some rescue boats cut across into their lane as the shark approaches
-    if (it.type === 'boat' && p > 0.3 && Math.random() < 0.4) { const n = it.lane + (it.lane === 0 ? 1 : it.lane === 2 ? -1 : (Math.random() < 0.5 ? -1 : 1)); if (row.free.includes(n)) from = LANES[n]; }
+    if (it.type === 'boat' && p > D.cut[0] && Math.random() < D.cut[1]) { const n = it.lane + (it.lane === 0 ? 1 : it.lane === 2 ? -1 : (Math.random() < 0.5 ? -1 : 1)); if (row.free.includes(n)) from = LANES[n]; }
     addObs(it.type, cx, d + (row.items.length > 1 && !it.wide ? (Math.random() - 0.5) * 2 : 0), from);
   }
   if (row.free.length && Math.random() < 0.65) {
@@ -1555,13 +1586,13 @@ function spawnRow(d) {
     for (let k = 0; k < 3; k++) addFish(LANES[l], d - 4 - k * 2.4);
   }
   g.lastD = d; g.lastPass = pass; g.lastForced = forced;
-  let T = lerp(1.25, 0.62, p) + Math.random() * 0.35;
+  let T = lerp(D.gap[0], D.gap[1], p) + Math.random() * D.gapR;
   if (forced) T = Math.max(T, 1.4);
   G.nextRow = d + T * v;
 }
 
 function hit(o) {
-  o.hit = true; G.lives--; G.invuln = 1.1; G.speedMul = 0.62; G.shake = 0.7;
+  o.hit = true; G.lives--; G.invuln = D.invuln; G.speedMul = D.slow; G.shake = 0.7;
   renderLives(); Snd.hit(); splash(G.x, -G.dist - 1.2, 46, 1.2); addRing(G.x, -G.dist - 1.2, 1.2);
   toast(o.def.hit, true);
   if (navigator.vibrate) { try { navigator.vibrate(120); } catch (e) { /* ignore */ } }
@@ -1569,7 +1600,7 @@ function hit(o) {
 }
 function win() { G.vmode = 'swim'; G.vt = 0; state = 'win'; G.endT = 0; Snd.win(); ui.hud.hidden = true; toast('탈출 성공!'); }
 function showResult(won) {
-  $('resEyebrow').textContent = won ? '부산항 방파제 통과' : '친수공원 인공수로';
+  $('resEyebrow').textContent = `${D.label} · ${won ? '부산항 방파제 통과' : '친수공원 인공수로'}`;
   $('resTitle').textContent = won ? '부캉이, 바다로!' : '다시 수로로…';
   const distTxt = Math.min(GOAL, Math.round(G.dist)).toLocaleString('ko-KR');
   $('resText').textContent = won
@@ -1582,8 +1613,8 @@ function showResult(won) {
   $('resV3').textContent = won ? `${G.lives} / 3` : `${Math.round(G.dist / GOAL * 100)}%`;
   let note = '';
   if (won) {
-    const b = store('bukangi-best-v2');
-    if (!b || !b.time || G.time < b.time) { store('bukangi-best-v2', { time: G.time, fish: G.fish }); note = '새 최고 기록이에요.'; }
+    const b = store(bestKey());
+    if (!b || !b.time || G.time < b.time) { store(bestKey(), { time: G.time, fish: G.fish }); note = `${D.label} 새 최고 기록이에요.`; }
     else note = `최고 기록은 ${fmtTime(b.time)}예요.`;
   }
   $('resNote').textContent = note;
@@ -1595,6 +1626,7 @@ addEventListener('keydown', (e) => {
   if (e.repeat) return;
   const k = e.key;
   if ((k === ' ' || k === 'Enter') && state === 'title' && document.activeElement === document.body) { startGame(); e.preventDefault(); }
+  else if (state === 'title' && (k === 'ArrowLeft' || k === 'ArrowRight')) { setMode(k === 'ArrowLeft' ? 'normal' : 'hard'); e.preventDefault(); }
   else if (k === 'ArrowLeft' || k === 'a' || k === 'A') { move(-1); e.preventDefault(); }
   else if (k === 'ArrowRight' || k === 'd' || k === 'D') { move(1); e.preventDefault(); }
   else if (k === 'ArrowUp' || k === 'w' || k === 'W' || (k === ' ' && state === 'play')) { jump(); e.preventDefault(); }
@@ -1621,6 +1653,8 @@ app.addEventListener('pointerup', (e) => {
 });
 app.addEventListener('pointercancel', () => { sw = null; });
 $('btnStart').addEventListener('click', startGame);
+document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+setMode(mode);
 $('btnRetry').addEventListener('click', startGame);
 $('btnHome').addEventListener('click', goHome);
 $('btnQuit').addEventListener('click', goHome);
@@ -1831,7 +1865,7 @@ function frame(now) {
 }
 resetRun();
 requestAnimationFrame((t) => { last = t; frame(t); });
-window.__bukangi = { OBST, LANES, G, get state() { return state; }, move, jump, dive, startGame, obstacles, addObs, clearObstacles };
+window.__bukangi = { setMode, get mode() { return mode; }, OBST, LANES, G, get state() { return state; }, move, jump, dive, startGame, obstacles, addObs, clearObstacles };
 })();
 </script>
 </body>
