@@ -1292,13 +1292,15 @@ function acquire(type) {
   e.mesh.visible = e.zone.visible = true; e.mesh.rotation.set(0, 0, 0); e.mesh.scale.setScalar(1); setZoneOp(e.zone, 0);
   return e;
 }
-function addObs(type, cx, d) {
+// from: optional start x; the obstacle then slides across into cx while 55 -> 28 m ahead.
+function addObs(type, cx, d, from) {
   const def = OBST[type], e = acquire(type);
   let dd = d;
-  if (def.vz) dd = d + def.vz * (d - G.dist) / Math.max(G.speed, 10);
-  e.mesh.position.set(cx, 0, -dd);
-  if (type === 'debris' || type === 'pump') e.mesh.rotation.y = Math.random() * 0.6 - 0.3;
-  obstacles.push({ type, def, e, mesh: e.mesh, zone: e.zone, cx, hit: false, cleared: false, ht: 0, ph: Math.random() * 6.28 });
+  if (def.vz) dd = d + def.vz * (d - G.dist) / Math.max(G.speed, vAt(G.dist));
+  const x0 = from === undefined ? cx : from;
+  e.mesh.position.set(x0, 0, -dd);
+  e.mesh.rotation.y = (type === 'debris' || type === 'pump') ? Math.random() * 0.6 - 0.3 : 0;
+  obstacles.push({ type, def, e, mesh: e.mesh, zone: e.zone, cx: x0, x0, x1: cx, hit: false, cleared: false, ht: 0, ph: Math.random() * 6.28 });
 }
 function setZoneOp(z, op) { z.userData.op = op; for (const [m, k] of z.userData.mats) m.opacity = op * k; }
 function release(o) { o.mesh.visible = o.zone.visible = false; pools[o.type].push(o.e); }
@@ -1435,7 +1437,7 @@ const renderMute = () => { $('btnMute').innerHTML = Snd.muted ? SND_OFF : SND_ON
 renderMute();
 const fmtTime = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 function renderBest() {
-  const b = store('bukangi-best');
+  const b = store('bukangi-best-v2');
   ui.best.textContent = b && b.time ? `최고 기록 ${fmtTime(b.time)} · 고등어 ${b.fish}마리` : '';
 }
 renderBest();
@@ -1445,6 +1447,7 @@ function toast(msg, bad = false) { ui.toast.textContent = msg; ui.toast.classNam
 
 function resetRun() {
   clearObstacles(); clearFish(); resetChunks();
+  G.gen = Object.assign({}, GEN0, { lastPass: [0, 1, 2] });
   Object.assign(G, { dist: 0, speed: 0, lives: 3, fish: 0, time: 0, lane: 1, x: 0, vx: 0, invuln: 0, speedMul: 1, shake: 0, nextRow: 70, endT: 0, ms: 0, vmode: 'swim', vt: 0, prevY: SHARK_Y, pitch: 0 });
   ui.fishN.textContent = '0'; renderLives();
 }
@@ -1495,27 +1498,70 @@ function cleared(o, air) {
   toast(`${o.def.name} 통과!`);
 }
 
-function spawnRow(d) {
-  const harbor = d > CANAL_END + 10, p = d / GOAL;
-  const singles = harbor ? ['buoy', 'buoy', 'boat', 'debris', 'boat'] : ['buoy', 'pump', 'debris', 'boat', 'buoy', 'pump'];
-  const doubles = harbor ? ['boom'] : ['net', 'boom', 'net'];
-  const r = Math.random(); let blocked;
-  if (r < 0.3 + p * 0.1) {
-    const l = Math.random() < 0.5 ? 0 : 1; addObs(pick(Math.random, doubles), (LANES[l] + LANES[l + 1]) / 2, d); blocked = [l, l + 1];
-  } else if (r < 0.62 + p * 0.12) {
-    const free = Math.floor(Math.random() * 3); blocked = [0, 1, 2].filter(l => l !== free);
-    for (const l of blocked) addObs(pick(Math.random, singles.filter(t => t !== 'boat')), LANES[l], d + (Math.random() - 0.5) * 2.5);
+// Cruise speed along the course: 13 m/s at the start -> 26 m/s at the breakwater.
+const vAt = (d) => 13 + 13 * Math.pow(clamp(d / GOAL, 0, 1), 1.1);
+const lerp = (a, b, t) => a + (b - a) * t;
+const GEN0 = { lastD: 0, lastPass: [0, 1, 2], lastForced: false };
+// One candidate row. items: {type, lane} (single) or {type, lane, wide} (two lanes lane, lane+1).
+function makeRow(p, harbor) {
+  const dodge = harbor ? ['buoy'] : ['buoy', 'pump'];
+  const vert1 = harbor ? ['debris', 'boat', 'boat'] : ['debris', 'boat'];
+  const wide = harbor ? ['boom'] : ['net', 'boom'];
+  const single = () => pick(Math.random, Math.random() < 0.55 ? dodge : vert1);
+  const r = Math.random(), pr1 = lerp(0.28, 0.06, p), pr3 = lerp(0.14, 0.4, p);
+  const items = [];
+  if (r < pr1) {
+    items.push({ type: single(), lane: Math.floor(Math.random() * 3) });
+  } else if (r < 1 - pr3) {
+    if (Math.random() < 0.45) items.push({ type: pick(Math.random, wide), lane: Math.random() < 0.5 ? 0 : 1, wide: true });
+    else { const free = Math.floor(Math.random() * 3); for (const l of [0, 1, 2]) if (l !== free) items.push({ type: single(), lane: l }); }
+  } else if (Math.random() < 0.5) {   // all three lanes blocked: a two-lane obstacle + one more
+    const l = Math.random() < 0.5 ? 0 : 1;
+    items.push({ type: pick(Math.random, wide), lane: l, wide: true }, { type: single(), lane: l === 0 ? 2 : 0 });
   } else {
-    const l = Math.floor(Math.random() * 3); addObs(pick(Math.random, singles), LANES[l], d); blocked = [l];
+    for (const l of [0, 1, 2]) items.push({ type: single(), lane: l });
   }
-  if (Math.random() < 0.65) {
-    const free = [0, 1, 2].filter(l => !blocked.includes(l)); const l = pick(Math.random, free);
+  const free = [0, 1, 2].filter(l => !items.some(it => it.lane === l || (it.wide && it.lane + 1 === l)));
+  const vert = [];
+  for (const it of items) { const d = OBST[it.type]; if (d.jump || d.dive) { vert.push(it.lane); if (it.wide) vert.push(it.lane + 1); } }
+  return { items, free, vert };
+}
+function spawnRow(d) {
+  const g = G.gen, p = d / GOAL, v = vAt(d), dt = (d - g.lastD) / v;
+  const harbor = d > CANAL_END + 10;
+  let row = null, pass, forced;
+  for (let tries = 0; tries < 16 && !row; tries++) {
+    const c = makeRow(p, harbor);
+    pass = c.free.length ? c.free : c.vert;
+    forced = !c.free.length;
+    if (!pass.length) continue;
+    // a forced jump/dive needs time to set up and must not follow another one
+    if (forced && (dt < 0.95 || g.lastForced)) continue;
+    // worst case over every lane the player could be in after the previous row
+    const need = Math.max(...g.lastPass.map(b => Math.min(...pass.map(a => Math.abs(a - b)))));
+    if (dt < 0.22 + 0.24 * need) continue;
+    row = c;
+  }
+  if (!row) { const l = pick(Math.random, [0, 1, 2]); row = { items: [{ type: 'buoy', lane: l }], free: [0, 1, 2].filter(x => x !== l) }; pass = row.free; forced = false; }
+  for (const it of row.items) {
+    const cx = it.wide ? (LANES[it.lane] + LANES[it.lane + 1]) / 2 : LANES[it.lane];
+    let from;
+    // later in the course some rescue boats cut across into their lane as the shark approaches
+    if (it.type === 'boat' && p > 0.3 && Math.random() < 0.4) { const n = it.lane + (it.lane === 0 ? 1 : it.lane === 2 ? -1 : (Math.random() < 0.5 ? -1 : 1)); if (row.free.includes(n)) from = LANES[n]; }
+    addObs(it.type, cx, d + (row.items.length > 1 && !it.wide ? (Math.random() - 0.5) * 2 : 0), from);
+  }
+  if (row.free.length && Math.random() < 0.65) {
+    const l = pick(Math.random, row.free);
     for (let k = 0; k < 3; k++) addFish(LANES[l], d - 4 - k * 2.4);
   }
+  g.lastD = d; g.lastPass = pass; g.lastForced = forced;
+  let T = lerp(1.25, 0.62, p) + Math.random() * 0.35;
+  if (forced) T = Math.max(T, 1.4);
+  G.nextRow = d + T * v;
 }
 
 function hit(o) {
-  o.hit = true; G.lives--; G.invuln = 1.7; G.speedMul = 0.42; G.shake = 0.7;
+  o.hit = true; G.lives--; G.invuln = 1.1; G.speedMul = 0.62; G.shake = 0.7;
   renderLives(); Snd.hit(); splash(G.x, -G.dist - 1.2, 46, 1.2); addRing(G.x, -G.dist - 1.2, 1.2);
   toast(o.def.hit, true);
   if (navigator.vibrate) { try { navigator.vibrate(120); } catch (e) { /* ignore */ } }
@@ -1536,8 +1582,8 @@ function showResult(won) {
   $('resV3').textContent = won ? `${G.lives} / 3` : `${Math.round(G.dist / GOAL * 100)}%`;
   let note = '';
   if (won) {
-    const b = store('bukangi-best');
-    if (!b || !b.time || G.time < b.time) { store('bukangi-best', { time: G.time, fish: G.fish }); note = '새 최고 기록이에요.'; }
+    const b = store('bukangi-best-v2');
+    if (!b || !b.time || G.time < b.time) { store('bukangi-best-v2', { time: G.time, fish: G.fish }); note = '새 최고 기록이에요.'; }
     else note = `최고 기록은 ${fmtTime(b.time)}예요.`;
   }
   $('resNote').textContent = note;
@@ -1584,11 +1630,13 @@ $('btnMute').addEventListener('click', () => { Snd.setMuted(!Snd.muted); store('
 document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
 
 /* ================= resize ================= */
+let baseFov = 60;
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
-  camera.fov = w / h < 0.8 ? 76 : w / h < 1.2 ? 68 : 58;
+  baseFov = w / h < 0.8 ? 76 : w / h < 1.2 ? 68 : 58;
+  camera.fov = baseFov;
   camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize); resize();
@@ -1604,12 +1652,12 @@ function update(dt) {
   if (state === 'play') {
     G.time += dt;
     const p = G.dist / GOAL;
-    G.speedMul = Math.min(1, G.speedMul + dt * 0.42);
-    const target = (11 + 9 * p) * G.speedMul;
+    G.speedMul = Math.min(1, G.speedMul + dt * 0.5);
+    const target = vAt(G.dist) * G.speedMul;
     G.speed += (target - G.speed) * Math.min(1, dt * 2.2);
     G.dist += G.speed * dt;
     G.invuln = Math.max(0, G.invuln - dt);
-    while (G.nextRow < G.dist + 190 && G.nextRow < GOAL - 35) { spawnRow(G.nextRow); G.nextRow += (24 - 9 * p) + Math.random() * 8; }
+    while (G.nextRow < G.dist + 210 && G.nextRow < GOAL - 35) spawnRow(G.nextRow);
     while (G.ms < MILESTONES.length && G.dist >= MILESTONES[G.ms].d) { toast(MILESTONES[G.ms].msg); G.ms++; }
     if (G.dist >= GOAL) win();
   } else if (state === 'win') {
@@ -1624,7 +1672,7 @@ function update(dt) {
 
   // lateral dynamics: critically-damped spring toward lane centre
   if (state !== 'paused') {
-    const xt = LANES[G.lane], wn = 9, zeta = 0.85;
+    const xt = LANES[G.lane], wn = 10.5, zeta = 0.85;
     const ax = wn * wn * (xt - G.x) - 2 * zeta * wn * G.vx;
     G.vx += ax * dt; G.x += G.vx * dt;
   }
@@ -1686,6 +1734,12 @@ function update(dt) {
     const o = obstacles[i], m = o.mesh, zn = o.zone;
     if (state !== 'paused') {
       if (o.def.vz && !o.hit) m.position.z += o.def.vz * dt;
+      if (o.x0 !== o.x1 && !o.hit) {
+        const k = smooth(55, 28, m.position.z - sz < 0 ? sz - m.position.z : 0);
+        o.cx = o.x0 + (o.x1 - o.x0) * k;
+        m.position.x = o.cx;
+        m.rotation.y = Math.sign(o.x1 - o.x0) * -Math.sin(Math.PI * k) * 0.5;
+      }
       o.ph += dt;
       m.position.y = Math.sin(o.ph * 1.7) * 0.05;
       m.rotation.z = Math.sin(o.ph * 1.3) * 0.04; m.rotation.x = Math.sin(o.ph * 1.1 + 1) * 0.03;
@@ -1744,6 +1798,8 @@ function update(dt) {
   const kc = 1 - Math.exp(-dt * (state === 'title' ? 2 : 4.5));
   camPos.lerp(tmpV, kc); camLook.lerp(tmpL, kc);
   if (state === 'play' && camPos.distanceTo(tmpV) > 12) { camPos.copy(tmpV); camLook.copy(tmpL); }
+  const fovT = baseFov + (state === 'play' ? clamp((G.speed - 13) * 0.45, 0, 6) : 0);
+  if (Math.abs(camera.fov - fovT) > 0.01) { camera.fov += (fovT - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
   camera.position.copy(camPos);
   if (G.shake > 0.001) { camera.position.x += (Math.random() - 0.5) * G.shake * 0.6; camera.position.y += (Math.random() - 0.5) * G.shake * 0.4; G.shake *= Math.exp(-dt * 6); }
   camera.lookAt(camLook);
@@ -1775,7 +1831,7 @@ function frame(now) {
 }
 resetRun();
 requestAnimationFrame((t) => { last = t; frame(t); });
-window.__bukangi = { G, get state() { return state; }, move, jump, dive, startGame, obstacles, addObs, clearObstacles };
+window.__bukangi = { OBST, LANES, G, get state() { return state; }, move, jump, dive, startGame, obstacles, addObs, clearObstacles };
 })();
 </script>
 </body>
