@@ -89,6 +89,7 @@ body { font-family: var(--font-body); -webkit-user-select: none; user-select: no
 }
 .screen.center .card { margin-left: 0; }
 .eyebrow { margin: 0; font-size: 12px; letter-spacing: .14em; color: var(--buoy); font-weight: 600; }
+h1, h2, .lede { word-break: keep-all; }
 h1, h2 { margin: 0; font-family: var(--font-display); font-weight: 400; line-height: .98; text-wrap: balance; }
 h1 { font-size: clamp(46px, 8vw, 74px); letter-spacing: -.01em; }
 h1 em { font-style: normal; color: var(--buoy); }
@@ -123,12 +124,34 @@ h2 { font-size: clamp(34px, 6vw, 48px); }
 }
 .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .btn-row > * { flex: 1 1 140px; }
+.btn-row > .cta { flex: 2 1 190px; padding-inline: 16px; }
+.btn-row > .ghost { flex: 1 1 96px; }
 .best { margin: 0; font-size: 13px; color: var(--mist); font-variant-numeric: tabular-nums; min-height: 1em; }
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; }
 .stats div { background: rgba(242, 247, 246, .06); border-radius: 12px; padding: 10px 12px; min-width: 0; }
 .stats dt { font-size: 12px; color: var(--mist); }
 .stats dd { margin: 4px 0 0; font-family: var(--font-display); font-size: 22px; font-variant-numeric: tabular-nums; }
 .note { margin: 0; font-size: 13px; line-height: 1.6; color: var(--mist); }
+.lb-block { display: grid; gap: 6px; }
+.lb-label { font-size: 12px; color: var(--mist); }
+.lb-row { display: flex; gap: 8px; }
+.lb-row input {
+  flex: 1; min-width: 0; padding: 11px 12px; border-radius: 12px; border: 1px solid rgba(242, 247, 246, .28);
+  background: rgba(242, 247, 246, .06); color: var(--foam); font: 600 15px var(--font-body);
+}
+.lb-row input:focus-visible { outline: 3px solid var(--buoy); outline-offset: 1px; }
+.lb-row .ghost { flex: none; }
+.rank-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: min(44vh, 420px); overflow-y: auto; }
+.rank-list li {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 10px; align-items: center;
+  padding: 9px 12px; border-radius: 10px; background: rgba(242, 247, 246, .05); font-variant-numeric: tabular-nums;
+}
+.rank-list .rk { font-family: var(--font-display); font-size: 18px; color: var(--mist); }
+.rank-list li:first-child .rk { color: var(--buoy); }
+.rank-list .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.rank-list .tm { font-family: var(--font-display); font-size: 18px; }
+.rank-list .fs { font-size: 12px; color: var(--mist); }
+.rank-list li.me { background: rgba(255, 122, 46, .16); box-shadow: inset 0 0 0 1px var(--buoy); }
 #fade { position: absolute; inset: 0; background: var(--harbor); opacity: 0; pointer-events: none; transition: opacity .35s; }
 #fade.on { opacity: 1; }
 #err { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; font-size: 15px; color: var(--foam); background: var(--harbor); }
@@ -203,7 +226,10 @@ h2 { font-size: clamp(34px, 6vw, 48px); }
         <button type="button" class="mode-btn" role="radio" data-mode="normal" aria-checked="true"><b>보통</b><small>최고 속도 22 m/s</small></button>
         <button type="button" class="mode-btn" role="radio" data-mode="hard" aria-checked="false"><b>어려움</b><small>최고 속도 26 m/s, 더 촘촘하게</small></button>
       </div>
-      <button class="cta" id="btnStart">바다로 헤엄치기</button>
+      <div class="btn-row">
+        <button class="cta" id="btnStart">바다로 헤엄치기</button>
+        <button class="ghost" id="btnRank">친구 랭킹</button>
+      </div>
       <p class="best" id="bestLine"></p>
     </div>
   </section>
@@ -230,10 +256,33 @@ h2 { font-size: clamp(34px, 6vw, 48px); }
         <div><dt id="resK3">남은 체력</dt><dd id="resV3">-</dd></div>
       </dl>
       <p class="note" id="resNote"></p>
+      <div class="lb-block" id="lbBlock" hidden>
+        <label class="lb-label" for="lbName">랭킹에 올릴 이름</label>
+        <div class="lb-row">
+          <input id="lbName" maxlength="12" autocomplete="nickname" placeholder="예: 부경대 부캉이">
+          <button class="ghost" id="btnLbSave">등록</button>
+        </div>
+        <p class="note" id="lbMsg" aria-live="polite"></p>
+      </div>
       <div class="btn-row">
         <button class="cta" id="btnRetry">다시 하기</button>
+        <button class="ghost" id="btnResRank">랭킹 보기</button>
         <button class="ghost" id="btnHome">처음 화면으로</button>
       </div>
+    </div>
+  </section>
+
+  <section class="screen center" id="scrRank" hidden>
+    <div class="card">
+      <p class="eyebrow">친구 랭킹 · 완주 기록</p>
+      <h2>누가 제일 빨리 탈출했나</h2>
+      <div class="mode" role="radiogroup" aria-label="랭킹 난이도">
+        <button type="button" class="mode-btn" role="radio" data-rank="normal" aria-checked="true"><b>보통</b></button>
+        <button type="button" class="mode-btn" role="radio" data-rank="hard" aria-checked="false"><b>어려움</b></button>
+      </div>
+      <ol class="rank-list" id="rankList"></ol>
+      <p class="note" id="rankNote"></p>
+      <button class="cta" id="btnRankClose">닫기</button>
     </div>
   </section>
 
@@ -1464,7 +1513,7 @@ const bestKey = () => (mode === 'hard' ? 'bukangi-best-v2' : 'bukangi-best-norma
 function setMode(m) {
   if (state !== 'title' || !DIFF[m]) return;
   mode = m; D = DIFF[m]; store('bukangi-mode', m);
-  document.querySelectorAll('.mode-btn').forEach(b => b.setAttribute('aria-checked', String(b.dataset.mode === m)));
+  document.querySelectorAll('.mode-btn[data-mode]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.mode === m)));
   renderBest();
 }
 function renderBest() {
@@ -1619,11 +1668,12 @@ function showResult(won) {
   }
   $('resNote').textContent = note;
   ui.result.hidden = false; $('btnRetry').focus();
+  lbOnResult(won);
 }
 
 /* ================= input ================= */
 addEventListener('keydown', (e) => {
-  if (e.repeat) return;
+  if (e.repeat || (e.target && e.target.closest && e.target.closest('input, textarea'))) return;
   const k = e.key;
   if ((k === ' ' || k === 'Enter') && state === 'title' && document.activeElement === document.body) { startGame(); e.preventDefault(); }
   else if (state === 'title' && (k === 'ArrowLeft' || k === 'ArrowRight')) { setMode(k === 'ArrowLeft' ? 'normal' : 'hard'); e.preventDefault(); }
@@ -1653,7 +1703,7 @@ app.addEventListener('pointerup', (e) => {
 });
 app.addEventListener('pointercancel', () => { sw = null; });
 $('btnStart').addEventListener('click', startGame);
-document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+document.querySelectorAll('.mode-btn[data-mode]').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
 setMode(mode);
 $('btnRetry').addEventListener('click', startGame);
 $('btnHome').addEventListener('click', goHome);
@@ -1863,6 +1913,129 @@ function frame(now) {
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
+/* ================= friends leaderboard (claude.ai shared db) ================= */
+// One document per person per difficulty: lb_<mode>/<viewer id> = { name, time, fish, lives, at }.
+// Everyone admitted reads every row; each person writes only their own (rules declared at publish).
+const LB = { db: null, user: null, uid: null, canWrite: null, status: 'loading', rows: { normal: [], hard: [] }, tab: 'normal', pending: null, from: null };
+const lbName = () => { try { return (localStorage.getItem('bukangi-name') || '').trim(); } catch (e) { return ''; } };
+const setLbName = (n) => { try { localStorage.setItem('bukangi-name', n); } catch (e) { /* ignore */ } };
+const cleanName = (n) => String(n || '').replace(/\s+/g, ' ').trim().slice(0, 12);
+// rows come from other viewers: keep only well-formed ones
+const lbValid = (r) => r && typeof r.time === 'number' && r.time > 20 && r.time < 3600 && typeof r.name === 'string' && r.name.trim() && r.name.length <= 24;
+const lbRankOf = (m, id) => { const i = LB.rows[m].findIndex(r => r.id === id); return i < 0 ? null : i + 1; };
+
+async function lbInit() {
+  const c = window.claude;
+  if (!c || typeof c.use !== 'function') { LB.status = 'none'; renderRank(); return; }
+  try {
+    const [db, user] = await Promise.all([c.use('db'), c.use('user')]);
+    if (!db) { LB.status = 'none'; renderRank(); return; }
+    LB.db = db; LB.user = user;
+    LB.uid = user ? await user.id() : null;
+    const cw = user ? await user.can('data.write') : null;
+    LB.canWrite = !LB.uid ? false : cw === false ? false : cw === true ? true : null;
+    for (const m of ['normal', 'hard']) {
+      db.collection('lb_' + m).orderBy('time').limit(100).onSnapshot((snap) => {
+        LB.rows[m] = snap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(lbValid);
+        LB.status = 'ok'; renderRank(); renderLbMsg();
+      }, () => { LB.status = 'error'; renderRank(); });
+    }
+  } catch (e) { LB.status = 'none'; renderRank(); }
+}
+
+function renderRank() {
+  const list = $('rankList'), note = $('rankNote');
+  document.querySelectorAll('.mode-btn[data-rank]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.rank === LB.tab)));
+  list.textContent = '';
+  const rows = LB.rows[LB.tab];
+  rows.slice(0, 50).forEach((r, i) => {
+    const li = document.createElement('li'); if (r.id === LB.uid) li.className = 'me';
+    const cell = (cls, txt) => { const sp = document.createElement('span'); sp.className = cls; sp.textContent = txt; li.appendChild(sp); };
+    cell('rk', String(i + 1)); cell('nm', r.name.trim()); cell('tm', fmtTime(r.time)); cell('fs', `고등어 ${Math.max(0, r.fish | 0)}`);
+    list.appendChild(li);
+  });
+  let msg = '';
+  if (LB.status === 'none') msg = '랭킹은 claude.ai에서 로그인한 상태로 이 게임 링크를 열었을 때 볼 수 있어요.';
+  else if (LB.status === 'loading') msg = '랭킹을 불러오는 중이에요.';
+  else if (LB.status === 'error') msg = '랭킹을 불러오지 못했어요. 잠시 후 다시 열어 주세요.';
+  else if (!rows.length) msg = `아직 ${DIFF[LB.tab].label} 완주 기록이 없어요. 첫 번째 주인공이 되어 보세요.`;
+  else if (LB.canWrite === false) msg = '지금 계정은 랭킹을 볼 수만 있어요. 기록을 올리려면 게임 주인에게 편집 권한으로 초대받아야 해요.';
+  else { const k = lbRankOf(LB.tab, LB.uid); msg = k ? `내 순위 ${k}위 · 전체 ${rows.length}명` : `전체 ${rows.length}명 · 완주하면 내 기록이 올라가요`; }
+  note.textContent = msg;
+}
+
+function openRank(from) {
+  LB.from = from; LB.tab = mode;
+  ui.title.hidden = true; ui.result.hidden = true;
+  $('scrRank').hidden = false; renderRank(); $('btnRankClose').focus();
+}
+function closeRank() {
+  $('scrRank').hidden = true;
+  if (LB.from === 'result') { ui.result.hidden = false; $('btnRetry').focus(); }
+  else { ui.title.hidden = false; $('btnStart').focus(); }
+}
+
+function renderLbMsg(text) {
+  if (text !== undefined) $('lbMsg').textContent = text;
+}
+// called when the result screen opens
+function lbOnResult(won) {
+  const block = $('lbBlock');
+  LB.pending = won ? { mode, time: G.time, fish: G.fish, lives: G.lives } : null;
+  block.hidden = !won;
+  if (!won) return;
+  const input = $('lbName'), btn = $('btnLbSave');
+  input.value = lbName();
+  const canTry = LB.status === 'ok' && LB.canWrite !== false;
+  input.disabled = btn.disabled = !canTry;
+  if (LB.status === 'none') renderLbMsg('랭킹 등록은 claude.ai에서 로그인한 상태로 이 링크를 열었을 때만 돼요.');
+  else if (LB.status !== 'ok') renderLbMsg('랭킹에 연결하는 중이에요. 잠시 후 등록을 눌러 주세요.');
+  else if (LB.canWrite === false) renderLbMsg('지금 계정은 랭킹을 볼 수만 있어요. 기록을 올리려면 게임 주인에게 편집 권한으로 초대받아야 해요.');
+  else if (lbName()) lbSubmit();
+  else renderLbMsg('이름을 정하면 이번 기록이 친구 랭킹에 올라가요.');
+  if (LB.status !== 'ok' && LB.status !== 'none') { input.disabled = btn.disabled = false; }
+}
+
+async function lbSubmit() {
+  const rec = LB.pending, name = cleanName($('lbName').value);
+  if (!rec) return;
+  if (!name) { renderLbMsg('이름을 한 글자 이상 적어 주세요.'); $('lbName').focus(); return; }
+  if (!LB.db || !LB.uid) { renderLbMsg('랭킹 등록은 claude.ai에서 로그인한 상태로 이 링크를 열었을 때만 돼요.'); return; }
+  setLbName(name); $('lbName').value = name;
+  const btn = $('btnLbSave'); btn.disabled = true;
+  const ref = LB.db.doc('lb_' + rec.mode + '/' + LB.uid);
+  const label = DIFF[rec.mode].label;
+  try {
+    const snap = await ref.get();
+    const prev = snap.exists ? snap.data() : null;
+    const better = !lbValid(prev) || rec.time < prev.time;
+    if (better) {
+      await ref.set({ name, time: Math.round(rec.time * 100) / 100, fish: rec.fish, lives: rec.lives, at: new Date().toISOString() });
+    } else if (prev.name !== name) {
+      await ref.update({ name });
+    }
+    LB.canWrite = true;
+    // the live subscription delivers the new row; rank it from the write we just made
+    const rows = LB.rows[rec.mode].filter(r => r.id !== LB.uid).concat([{ id: LB.uid, time: better ? rec.time : prev.time }]).sort((a, b) => a.time - b.time);
+    const k = rows.findIndex(r => r.id === LB.uid) + 1;
+    renderLbMsg(better ? `${label} 랭킹에 등록했어요 · ${k}위` : `이전 기록 ${fmtTime(prev.time)}이 더 빨라서 그대로 뒀어요 · ${label} ${k}위`);
+    LB.pending = null;
+  } catch (e) {
+    const code = e && e.code;
+    if (code === 'invalid_argument') { LB.canWrite = false; renderLbMsg('지금 계정은 랭킹을 볼 수만 있어요. 기록을 올리려면 게임 주인에게 편집 권한으로 초대받아야 해요.'); }
+    else if (code === 'quota_exceeded') renderLbMsg('랭킹 저장 공간이 가득 찼어요. 게임 주인에게 알려 주세요.');
+    else { renderLbMsg('등록하지 못했어요. 잠시 후 다시 눌러 주세요.'); btn.disabled = false; }
+  }
+}
+
+$('btnRank').addEventListener('click', () => openRank('title'));
+$('btnResRank').addEventListener('click', () => openRank('result'));
+$('btnRankClose').addEventListener('click', closeRank);
+document.querySelectorAll('.mode-btn[data-rank]').forEach(b => b.addEventListener('click', () => { LB.tab = b.dataset.rank; renderRank(); }));
+$('btnLbSave').addEventListener('click', lbSubmit);
+$('lbName').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); lbSubmit(); } });
+lbInit();
+
 resetRun();
 requestAnimationFrame((t) => { last = t; frame(t); });
 window.__bukangi = { setMode, get mode() { return mode; }, OBST, LANES, G, get state() { return state; }, move, jump, dive, startGame, obstacles, addObs, clearObstacles };
